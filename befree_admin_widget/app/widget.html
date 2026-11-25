@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Befree × Race2Cloud</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="page-heading">
+        <nav class="breadcrumb" id="breadcrumb" aria-label="Breadcrumb"></nav>
+        <h1 class="page-title" id="page-title"></h1>
+      </div>
+
+      <div class="topbar-actions">
+        <label class="search">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" id="global-search" placeholder="Search deals, accounts, contacts" aria-label="Search deals, accounts, contacts">
+        </label>
+
+        <div class="select select-country">
+          <svg class="icon select-lead" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9S14.5 18.500 12 21c-2.500-2.500-3.800-5.500-3.800-9S9.500 5.500 12 3z"/></svg>
+          <select id="country-select" aria-label="Country">
+            <option value="ALL">All countries</option>
+            <option value="US" selected>United States (US)</option>
+            <option value="UK">United Kingdom (UK)</option>
+            <option value="AU">Australia (AU)</option>
+          </select>
+          <svg class="icon select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <div class="select">
+          <select id="date-select" aria-label="Date range">
+            <option value="7d">Last 7 days</option>
+            <option value="30d" selected>Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="12m">Last 12 months</option>
+          </select>
+          <svg class="icon select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <button type="button" class="btn-icon" id="notifications-btn" aria-label="Notifications">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.500 7.500 2.500 7.500h-17S6 15 6 9"/><path d="M10 20a2.200 2.200 0 0 0 4 0"/></svg>
+        </button>
+
+        <div class="avatar" aria-label="User RE">RE</div>
+
+        <button type="button" class="btn-primary" id="create-btn">+ Create new</button>
+      </div>
+    </div>
+
+    <div class="refresh-bar">
+      <span id="last-updated" aria-live="polite">Last updated —</span>
+      <button type="button" class="refresh-btn" id="refresh-btn" aria-label="Refresh data" title="Refresh data">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+      </button>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="tab" role="tab" id="tab-overview" data-tab="overview" aria-controls="panel-overview">Admin Overview</button>
+      <button type="button" class="tab" role="tab" id="tab-reports" data-tab="reports" aria-controls="panel-reports">Reports &amp; Analytics</button>
+      <button type="button" class="tab" role="tab" id="tab-marketing" data-tab="marketing" aria-controls="panel-marketing">Marketing</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <section class="panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden></section>
+    <section class="panel" role="tabpanel" id="panel-reports" aria-labelledby="tab-reports" hidden></section>
+    <section class="panel" role="tabpanel" id="panel-marketing" aria-labelledby="tab-marketing" hidden></section>
+  </main>
+
+  <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+  <!-- Chart.js: service contribution and revenue trend charts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/checks.js"></script>
+  <script src="js/new-cards.js"></script>
+  <script src="js/tab1-overview.js"></script>
+  <script src="js/tab2-reports.js"></script>
+  <script src="js/tab3-marketing.js"></script>
+</body>
+</html>

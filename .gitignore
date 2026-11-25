@@ -1,0 +1,33 @@
+# Installed packages (npm install brings them back)
+node_modules/
+
+# Private keys, certificates and secrets
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Upload packages and backups
+dist/
+*.zip
+
+# Logs
+*.log
+
+# Client documents
+*.pdf
+
+# Editor, tool and system files
+.vscode/
+.idea/
+.claude/
+.playwright-mcp/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*~
