@@ -26,6 +26,9 @@
     // AI summary: API name of the CRM function that calls OpenAI (see crm_functions/lead_ai_summary.dg)
     // savedField: Leads field that keeps the last summary (Multi Line, Large). Without it, summaries are kept in the browser only.
     ai: { functionName: 'lead_ai_summary', savedField: 'AI_Summary_Data' },
+    // Convert to deal: 'duplicate' shows the button only when the duplicate alert finds a match, 'always' shows it on every lead.
+    // functionName: CRM function that converts the lead (see crm_functions/lead_convert_to_deal.dg)
+    convert: { show: 'duplicate', functionName: 'lead_convert_to_deal' },
     // Duplicate alert: these email domains do not identify a company
     freeMail: ['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk', 'yahoo.com.au', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'rediffmail.com', 'bigpond.com', 'zoho.com', 'zohomail.com'],
     closedTaskStatus: ['Completed', 'Done', 'Cancelled'],

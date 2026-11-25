@@ -107,6 +107,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 button.primary, .actions button:first-child:not(:disabled):not(.quiet) { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover:not(:disabled), .actions button:first-child:hover:not(:disabled):not(.quiet) { background: var(--accent-dark); border-color: var(--accent-dark); }
 .actions button.primary:disabled { background: #e7ebf3; border-color: #d6dce7; color: var(--mute); opacity: .9; }
+.actions button[hidden] { display: none; }
 button.quiet { color: #a82f17; }
 button.quiet:hover:not(:disabled) { border-color: var(--hot); background: var(--hot-bg); }
 .actions button.quiet { margin-left: auto; }
@@ -196,6 +197,7 @@ textarea { font: inherit; color: inherit; width: 100%; border: 1px solid #c9d1de
 .tasks .closed b { color: var(--mute); text-decoration: line-through; font-weight: 500; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 12px; }
 .fields input { display: block; width: 100%; margin-top: 3px; }
+.panel .fields select { display: block; width: 100%; margin-top: 3px; }
 .row.end { margin-top: 8px; }
 
 /* AI summary */

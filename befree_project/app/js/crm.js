@@ -234,14 +234,41 @@
       const ask = (label, run) => run().catch(() => { if (!failed.includes(label)) failed.push(label); return []; });
       const [named, contacts, leads, ...sites] = await Promise.all([
         company ? ask('accounts', () => rows(M.account, [A.name], `${A.name} = ${quote(company)}`, 'id asc')) : [],
-        email ? ask('contacts', () => rows(M.contact, [L.firstName, L.lastName], `${L.email} = ${quote(email)}`, 'id asc')) : [],
+        email ? ask('contacts', () => rows(M.contact, [L.firstName, L.lastName, F.contact.account, F.contact.account + '.' + A.name], `${L.email} = ${quote(email)}`, 'id asc')) : [],
         email ? ask('leads', () => rows('Leads', [L.firstName, L.lastName], `${L.email} = ${quote(email)}`, 'id asc')) : [],
         ...domains.map(d => ask('accounts', () => rows(M.account, [A.name, L.website], `${L.website} like ${quote('%' + d + '%')}`, 'id asc').then(x => x.filter(r => root.BefreeRules.domainOf(r[L.website]) === d))))
       ]);
       const accounts = [];
       named.forEach(r => accounts.push({ id: r.id, name: r[A.name], by: 'same name' }));
       sites.flat().forEach(r => { if (!accounts.some(a => a.id === r.id)) accounts.push({ id: r.id, name: r[A.name], by: 'same website' }); });
-      return { email, accounts, failed, contacts: contacts.map(r => ({ id: r.id, name: person(r) })), leads: leads.filter(r => r.id !== v.contact.id).map(r => ({ id: r.id, name: person(r) })) };
+      return { email, accounts, failed, contacts: contacts.map(r => ({ id: r.id, name: person(r), accountId: id(r[F.contact.account]), accountName: r[F.contact.account + '.' + A.name] || name(r[F.contact.account]) })), leads: leads.filter(r => r.id !== v.contact.id).map(r => ({ id: r.id, name: person(r) })) };
+    },
+    // Stage choices as set up in the Deals module
+    async dealStages() {
+      let stage;
+      try {
+        const r = await ZOHO.CRM.META.getFields({ Entity: M.deal });
+        stage = ((r && r.fields) || []).find(f => f.api_name === F.deal.stage);
+      } catch (e) { throw new Error('The Deal stages could not be read from CRM. ' + why(e)); }
+      const list = ((stage && stage.pick_list_values) || []).filter(p => p.type !== 'unused').map(p => p.actual_value || p.display_value).filter(x => x && x !== '-None-');
+      if (!list.length) throw new Error('No Deal stages were returned by CRM.');
+      return list;
+    },
+    // Converts the lead with CRM's own lead conversion, run by a CRM function
+    async convert(v, f) {
+      const fn = C.convert.functionName;
+      const details = { deal_name: f.dealName.trim(), stage: f.stage, closing_date: f.closingDate, amount: f.amount || '', account_id: f.accountId || '', contact_id: f.contactId || '' };
+      let r;
+      try {
+        r = await ZOHO.CRM.FUNCTIONS.execute(fn, { arguments: JSON.stringify({ lead_id: String(v.contact.id), details: JSON.stringify(details) }) });
+      } catch (e) { throw new Error(`The CRM function ${fn} could not be run. ${why(e)}`); }
+      let out = r && r.details && r.details.output;
+      if (!out) throw new Error(`The CRM function ${fn} did not return an answer. Check in CRM whether the lead was converted before trying again.`);
+      try {
+        if (typeof out === 'string') out = JSON.parse(out);
+      } catch (e) { throw new Error('The CRM function returned an answer that could not be read. Check in CRM whether the lead was converted.'); }
+      if (String(out.ok) !== 'true') throw new Error(out.error || 'The CRM function reported an error.');
+      return { dealId: out.deal_id || '', accountId: out.account_id || '', contactId: out.contact_id || '' };
     },
     // Runs the CRM function that calls OpenAI. The API key stays in CRM and never reaches this page.
     async summarize(v) {

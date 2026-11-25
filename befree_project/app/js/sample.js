@@ -47,7 +47,7 @@
 
   root.BefreeSample = {
     live: false,
-    list: user => contacts.filter(c => root.BefreeRules.canSee(user, accounts.find(a => a.id === c.accountId).country)).map(c => ({ id: c.id, name: c.name, sub: accounts.find(a => a.id === c.accountId).name, services: c.services, status: c.lifecycle })),
+    list: user => contacts.filter(c => !c.converted && root.BefreeRules.canSee(user, accounts.find(a => a.id === c.accountId).country)).map(c => ({ id: c.id, name: c.name, sub: accounts.find(a => a.id === c.accountId).name, services: c.services, status: c.lifecycle })),
     async load(id, user) {
       const contact = find(id), account = accounts.find(a => a.id === contact.accountId);
       const team = contacts.filter(c => c.accountId === account.id);
@@ -67,6 +67,13 @@
       };
     },
     async duplicates(v) { return { email: v.contact.email, failed: [], contacts: [], leads: [], accounts: v.deals.length ? [{ id: v.account.id, name: v.account.name, by: 'same name' }] : [] }; },
+    async dealStages() { return Object.keys(C.stages); },
+    async convert(v, f) {
+      const deal = { id: 'd' + next++, accountId: v.account.id, name: f.dealName.trim(), stage: f.stage, raisedBy: v.user.name };
+      deals.push(deal);
+      Object.assign(find(v.contact.id), { converted: true, lifecycle: 'Opportunity' });
+      return { dealId: deal.id, accountId: v.account.id, contactId: v.contact.id };
+    },
     async users() { return C.users.filter(u => u.role === 'BDM').map(u => ({ id: u.name, name: u.name })); },
     async setOwner(v, id) { accounts.find(a => a.id === v.account.id).owner = id; },
     async saveFields(v, changes) { Object.assign(find(v.contact.id), changes); },

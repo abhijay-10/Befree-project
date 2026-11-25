@@ -125,3 +125,21 @@ test('company domain from a website or an email', () => {
   for (const t of ['https://www.Acme.com.au/about?x=1', 'acme.com.au', 'WWW.acme.com.au/', 'jo@acme.com.au', 'http://acme.com.au:8080']) assert.equal(R.domainOf(t), 'acme.com.au', t);
   for (const t of ['', null, undefined, 'jo@gmail.com', 'not a site', 'localhost', "x'y.com"]) assert.equal(R.domainOf(t), '', String(t));
 });
+
+test('convert to deal reuses the contact and its account first', () => {
+  const c = R.convertChoices({ contacts: [{ id: 'p1', name: 'Jo', accountId: 'a1', accountName: 'Acme' }], accounts: [{ id: 'a2', name: 'Acme Ltd', by: 'same website' }], leads: [] });
+  assert.equal(c.contactId, 'p1');
+  assert.equal(c.accountId, 'a1');
+  assert.deepEqual(c.accounts.map(a => a.id), ['a1', 'a2']);
+  const none = R.convertChoices({ contacts: [], accounts: [], leads: [] });
+  assert.equal(none.accountId + none.contactId, '');
+});
+test('convert to deal checks the form', () => {
+  const choices = { contacts: [{ id: 'p1', name: 'Jo', accountId: 'a1' }] };
+  const f = { dealName: 'Acme', stage: 'Qualified', closingDate: '2026-12-24', amount: '', accountId: 'a1', contactId: 'p1' };
+  assert.equal(R.checkConvert(f, choices), null);
+  for (const bad of [{ dealName: ' ' }, { stage: '' }, { closingDate: '' }, { amount: '-1' }, { accountId: '' }]) assert.ok(R.checkConvert({ ...f, ...bad }, choices), JSON.stringify(bad));
+});
+test('only Admin, BDM and BDE can convert', () => {
+  assert.deepEqual(['Admin', 'BDM', 'BDE', 'Marketing', 'View only'].map(role => R.can({ role }, 'convert')), [true, true, true, false, false]);
+});

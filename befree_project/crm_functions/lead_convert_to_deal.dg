@@ -1,0 +1,70 @@
+string standalone.lead_convert_to_deal(String lead_id, String details)
+{
+	// Called by the Convert to deal button in the Leads widget.
+	// details is JSON: deal_name, stage, closing_date, amount, account_id, contact_id
+	// An empty account_id or contact_id means CRM creates a new record.
+	result = Map();
+	result.put("ok",false);
+	try
+	{
+		id_text = ifnull(lead_id,"").toString().trim();
+		if(!id_text.matches("[0-9]+"))
+		{
+			result.put("error","The function did not receive a lead id. Check that its argument is named lead_id.");
+			return result.toString();
+		}
+		request_map = ifnull(details,"{}").toString().toMap();
+		deal_name = ifnull(request_map.get("deal_name"),"").toString().trim();
+		stage = ifnull(request_map.get("stage"),"").toString().trim();
+		closing_date = ifnull(request_map.get("closing_date"),"").toString().trim();
+		if(deal_name == "" || stage == "" || closing_date == "")
+		{
+			result.put("error","Deal name, stage and closing date are required. Check that the second argument is named details.");
+			return result.toString();
+		}
+		deal = Map();
+		deal.put("Deal_Name",deal_name);
+		deal.put("Stage",stage);
+		deal.put("Closing_Date",closing_date);
+		amount = ifnull(request_map.get("amount"),"").toString().trim();
+		if(amount != "")
+		{
+			deal.put("Amount",amount.toDecimal());
+		}
+		values = Map();
+		values.put("Deals",deal);
+		// Never replace the details of an existing account or contact with the lead's details
+		values.put("overwrite",false);
+		account_id = ifnull(request_map.get("account_id"),"").toString().trim();
+		if(account_id != "")
+		{
+			values.put("Accounts",account_id);
+		}
+		contact_id = ifnull(request_map.get("contact_id"),"").toString().trim();
+		if(contact_id != "")
+		{
+			values.put("Contacts",contact_id);
+		}
+		response = zoho.crm.convertLead(id_text.toLong(),values);
+		info response;
+		new_deal = ifnull(response.get("Deals"),"").toString();
+		new_account = ifnull(response.get("Accounts"),"").toString();
+		new_contact = ifnull(response.get("Contacts"),"").toString();
+		if(new_deal == "" && new_account == "" && new_contact == "")
+		{
+			result.put("error","CRM did not convert the lead: " + ifnull(response.get("message"),response.toString()));
+			return result.toString();
+		}
+		result.put("ok",true);
+		result.put("deal_id",new_deal);
+		result.put("account_id",new_account);
+		result.put("contact_id",new_contact);
+	}
+	catch (e)
+	{
+		info "lead_convert_to_deal failed: " + e;
+		result.put("ok",false);
+		result.put("error","The convert function failed. Open the function log in CRM, and check whether the lead was converted.");
+	}
+	return result.toString();
+}

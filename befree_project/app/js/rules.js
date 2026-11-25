@@ -120,6 +120,26 @@
     return null;
   }
 
+  // Convert to deal: the existing records that can be reused, and which are picked at first
+  function convertChoices(dup) {
+    const contacts = dup.contacts.map(c => ({ id: c.id, name: c.name, accountId: c.accountId || '', accountName: c.accountName || '' }));
+    const accounts = [];
+    const add = (id, name, by) => { if (id && !accounts.some(a => a.id === id)) accounts.push({ id, name, by }); };
+    contacts.forEach(c => add(c.accountId, c.accountName || 'Account of ' + c.name, 'account of ' + c.name));
+    dup.accounts.forEach(a => add(a.id, a.name, a.by));
+    const first = contacts[0];
+    return { accounts, contacts, contactId: first ? first.id : '', accountId: (first && first.accountId) || (accounts[0] ? accounts[0].id : '') };
+  }
+  function checkConvert(f, choices) {
+    if (!String(f.dealName || '').trim()) return 'Enter the deal name.';
+    if (!f.stage) return 'Choose a stage.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.closingDate || '')) return 'Choose a closing date.';
+    if (f.amount && !(Number(f.amount) >= 0)) return 'The amount must be a number, 0 or more.';
+    const c = choices.contacts.find(x => x.id === f.contactId);
+    if (c && c.accountId && c.accountId !== f.accountId) return c.name + ' belongs to another account. Choose that account, or create a new contact.';
+    return null;
+  }
+
   // Checks the AI answer before it is shown. CRM facts win over the AI result.
   const verdicts = { interested: 'Interested', possible: 'Possibly interested', too_early: 'Too early to tell', not_interested: 'Not interested' };
   function checkSummary(v, raw) {
@@ -146,9 +166,9 @@
 
   // Step 10: our proposal, to be confirmed with Befree. CRM profiles must enforce the same.
   const access = {
-    Admin: ['ai', 'edit', 'note', 'newLead', 'owner', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise', 'allDeals'],
-    BDM: ['ai', 'edit', 'note', 'newLead', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise', 'allDeals'],
-    BDE: ['ai', 'edit', 'note', 'newLead', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise'],
+    Admin: ['ai', 'edit', 'note', 'newLead', 'owner', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise', 'convert', 'allDeals'],
+    BDM: ['ai', 'edit', 'note', 'newLead', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise', 'convert', 'allDeals'],
+    BDE: ['ai', 'edit', 'note', 'newLead', 'service', 'task', 'email', 'call', 'book', 'outcome', 'optOut', 'raise', 'convert'],
     Marketing: ['optOut', 'allDeals']
   };
   const can = (user, action) => (access[user.role] || []).includes(action);
@@ -157,7 +177,7 @@
 
   const R = {
     toDate, day, daysBetween, addBusinessDays, businessDaysSince, segment, userFor, countServices, isHighIntent, engagement, temperature,
-    routing, isOptedOut, latestMeeting, meetingState, canRaiseDeal, checkOutcome, checkSummary, domainOf, can, canSee, visibleDeals
+    routing, isOptedOut, latestMeeting, meetingState, canRaiseDeal, checkOutcome, convertChoices, checkConvert, checkSummary, domainOf, can, canSee, visibleDeals
   };
   if (typeof module !== 'undefined') module.exports = R; else root.BefreeRules = R;
 })(this);
