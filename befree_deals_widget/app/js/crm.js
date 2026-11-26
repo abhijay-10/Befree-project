@@ -186,7 +186,11 @@
       list.partial = !!all.partial;
       return list;
     },
-    move: (v, to) => update(v, { [D.stage]: to }),
+    // The stage note is kept on the deal, and saved before the stage changes
+    async move(v, to, note) {
+      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Stage update: ' + to, Content: note }));
+      await update(v, { [D.stage]: to });
+    },
     addNote: (v, text) => saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Note', Content: text })),
     addTask: (v, subject, due) => saved(ZOHO.CRM.API.insertRecord({ Entity: 'Tasks', APIData: { Subject: subject, Due_Date: due, What_Id: v.deal.id, $se_module: 'Deals', Status: 'Not Started' }, Trigger: ['workflow'] })),
     closeTask: (v, taskId) => saved(ZOHO.CRM.API.updateRecord({ Entity: 'Tasks', APIData: { id: taskId, Status: 'Completed' }, Trigger: ['workflow'] })),
@@ -194,6 +198,7 @@
     lose: (v, stage, reason) => update(v, { [D.stage]: stage, [D.lostReason]: reason }),
     // "to" is the stage the next step moves the deal to, if any
     async nextStep(v, text, to) {
+      if (to) await saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Stage update: ' + to, Content: 'Moved from the next step: ' + text }));
       await update(v, { [D.nextStep]: text || null, ...(to ? { [D.stage]: to } : {}), ...(X.nextStepUpdated ? { [X.nextStepUpdated]: new Date().toLocaleDateString('en-CA') } : {}) });
     },
     closeDate: (v, date) => update(v, { [D.closeDate]: date }),

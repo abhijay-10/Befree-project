@@ -45,6 +45,10 @@
   // The stages are Lead_Status values, matched without spaces, hyphens or capitals. Junk is not a stage.
   const STAGES = [['Not Contacted', 'Not Contacted'], ['Contacted', 'Contacted'], ['Pre-Qualified', 'Pre-Qualified'], ['Qualified', 'Qualified (Deal Created)']];
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const crmStatuses = () => {
+    const f = ((V.service && V.service.fields) || []).find(x => x.api_name === C.lead.status);
+    return f ? (f.pick_list_values || []).filter(p => p.type !== 'unused').map(p => p.actual_value || p.display_value).filter(x => x && x !== '-None-') : statusOptions();
+  };
   const statusOptions = () => ((V.editable || []).find(f => f.key === 'status') || {}).options || [];
   const crmStatus = name => statusOptions().find(o => norm(o) === norm(name) || (name === 'Junk' && norm(o) === 'junklead'));
   function journey() {
@@ -157,7 +161,7 @@
       .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
     return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(c.name))}</div><div class="who"><h1>${esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
       <p>${c.title ? esc(c.title) + ', ' : ''}${!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)}</p></div></header>
-      <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
+      <dl class="facts">${facts.map(([k, v]) => `<div${k === 'Service' ? ' class="wide"' : ''}><dt>${k}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join('')}</dl>`;
   }
   function temperatureBlock(t) {
     if (missing('touches') && V.isLead) return savedHeatBlock();
@@ -490,11 +494,16 @@
     $('#rail').hidden = false;
     if (!$('#find')) $('#rail').innerHTML = '<div class="rail-top"><div class="rail-head"><p>Leads <span id="count"></span></p><button class="mini" data-do="refresh" aria-label="Refresh leads" title="Refresh leads">' + icon('sync') + '</button><button class="mini primary" id="newLead" data-do="newLead">' + icon('plus') + 'New</button></div><input id="find" type="search" placeholder="Search name or company" aria-label="Search name or company"><div class="filters"><select id="status" aria-label="Filter by status"></select><select data-filter="country" aria-label="Filter by country"></select><select data-filter="service" aria-label="Filter by service"></select><select data-filter="source" aria-label="Filter by lead source"></select></div></div><div id="leads"></div>';
     $('#newLead').hidden = !R.can(V.user, 'newLead');
-    const states = [...new Set(list.map(c => c.status).filter(Boolean))].sort();
-    if (ui.status !== 'all' && !states.includes(ui.status)) ui.status = 'all';
-    if ($('#status').dataset.key !== states.join()) {
-      $('#status').dataset.key = states.join();
-      $('#status').innerHTML = '<option value="all">All statuses</option>' + states.map(s => `<option>${esc(s)}</option>`).join('');
+    // All statuses from CRM, with how many leads have each, so every status can be checked
+    const states = [...new Set(crmStatuses().concat(list.map(c => c.status).filter(Boolean)))];
+    const count = s => list.filter(c => s === 'none' ? !c.status : c.status === s).length;
+    const blank = count('none');
+    if (ui.status !== 'all' && !(ui.status === 'none' && blank) && !states.includes(ui.status)) ui.status = 'all';
+    const statusKey = states.map(s => s + count(s)).join() + '|' + blank;
+    if ($('#status').dataset.key !== statusKey) {
+      $('#status').dataset.key = statusKey;
+      $('#status').innerHTML = `<option value="all">All statuses (${list.length})</option>` + states.map(s => `<option value="${esc(s)}">${esc(s)} (${count(s)})</option>`).join('') +
+        (blank ? `<option value="none">No status (${blank})</option>` : '');
     }
     $('#status').value = ui.status;
     const q = $('#find').value.trim().toLowerCase();
@@ -507,7 +516,7 @@
       if (box.dataset.key !== found.join()) { box.dataset.key = found.join(); box.innerHTML = `<option value="">${all}</option>` + found.map(x => `<option>${esc(x)}</option>`).join(''); }
       box.value = pick[k];
     });
-    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && (ui.status === 'all' || c.status === ui.status) && Object.keys(pick).every(k => !pick[k] || valuesOf(c, k).includes(pick[k])));
+    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && (ui.status === 'all' || (ui.status === 'none' ? !c.status : c.status === ui.status)) && Object.keys(pick).every(k => !pick[k] || valuesOf(c, k).includes(pick[k])));
     const view = shown.slice(0, 200);
     const key = view.map(c => c.id + c.name + c.sub + c.status).join();
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;

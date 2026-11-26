@@ -71,6 +71,14 @@ window.Checks = (function () {
         same(Number(card.dataset.rowsTotal), Number(card.dataset.total)), where + card.dataset.rowsTotal + " vs " + card.dataset.total);
     });
 
+    if (data.mkt) {
+      report("marketing revenue KPI = sourced Won only", same(data.mkt.wonAmount, o.won.sourced), where + data.mkt.wonAmount + " vs " + o.won.sourced);
+      report("marketing pipeline KPI = sourced open deals", same(data.mkt.openAmount, o.open.sourced), where + data.mkt.openAmount + " vs " + o.open.sourced);
+      if (data.mkt.leads !== null) {
+        const byChannel = sum(data.mkt.byChannel.map(function (c) { return c.leads; }));
+        report("leads by channel add up to new leads", byChannel === data.mkt.leads, where + byChannel + " vs " + data.mkt.leads);
+      }
+    }
     const channels = sum(data.attribution.map(function (c) { return c.sourced; }));
     report("sum(channels) = confirmed amount", same(channels, k.confirmedAmount), where + channels + " vs " + k.confirmedAmount);
 

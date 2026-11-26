@@ -244,7 +244,7 @@ window.App = (function () {
   function optionText(option, range) {
     return option === "won"
       ? "Won only · closing date in " + periodText(range)
-      : "Won + Open · won: closing date in " + periodText(range) + " · open: deals open today, not limited by the date filter";
+      : "Won + Open · won in " + periodText(range) + ", plus deals open today";
   }
 
   // "Won only" / "Won + Open" switch. Each card keeps its own choice.
@@ -265,7 +265,13 @@ window.App = (function () {
   // "Won ₹X · Open ₹Y · Total ₹Z", shown in Won + Open.
   function splitLine(won, open, format) {
     const f = format || formatINR;
-    return el("p", "opt-split", "Won " + f(won) + " · Open " + f(open) + " · Total " + f(won === null || open === null ? null : won + open));
+    const line = el("p", "opt-split");
+    [["won", "Won", won], ["open", "Open", open], ["total", "Total", won === null || open === null ? null : won + open]].forEach(function (x) {
+      const chip = el("span", "opt-chip is-" + x[0]);
+      chip.append(el("span", "", x[1] + " "), el("b", "", f(x[2])));
+      line.appendChild(chip);
+    });
+    return line;
   }
 
   // items = [{label, color}]

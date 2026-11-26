@@ -419,3 +419,24 @@ h2 svg { color: var(--teal); }
 .outside { max-width: 520px; margin: 60px auto; padding: 28px 30px; background: var(--card); border: 1px solid var(--rule-dark); border-radius: var(--r); box-shadow: var(--lift); text-align: center; }
 .outside b { display: block; margin-bottom: 6px; font-size: 18px; }
 .outside p { color: var(--mute); }
+
+/* ---------- Lighter: soft colour, dark text ---------- */
+.rail-top { background: linear-gradient(180deg, #e3f5f2, #f6fbfc); color: var(--ink); border-bottom: 1px solid var(--rule); }
+.rail-top p { color: var(--ink); }
+#count { background: var(--dgrad); color: #fff; }
+#find, .filters select { border-color: var(--rule-dark); background-color: #fff; }
+.ticket { background: linear-gradient(120deg, #e6f6f3 0%, #e7f3fa 55%, #eceeff 112%); color: var(--ink); }
+.ticket::before { background: radial-gradient(circle, rgba(8, 145, 178, .12), transparent 70%); }
+.ticket::after { background: radial-gradient(circle, rgba(13, 148, 136, .10), transparent 70%); }
+h1 { color: var(--ink); }
+h1 .pill { background: var(--green-bg); }
+.who p { color: var(--mute); }
+.who button.link, .who button.link:hover:not(:disabled) { color: var(--teal-dark); }
+.ticket :focus-visible { outline-color: var(--teal); }
+.sep { background: #b5c9cf; }
+.strip { background: rgba(255, 255, 255, .85); border-color: rgba(13, 148, 136, .14); backdrop-filter: none; }
+.strip > div + div { border-left-color: var(--rule); }
+.strip dt { color: var(--teal-dark); }
+.strip dd { color: var(--ink); }
+.journey li.next { background: linear-gradient(120deg, color-mix(in srgb, var(--c) 85%, #fff), color-mix(in srgb, var(--c) 55%, #6366f1)); }
+.panel input[name=note] { width: min(100%, 560px); }

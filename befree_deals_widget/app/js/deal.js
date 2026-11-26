@@ -75,7 +75,7 @@
   }
   function form() {
     const d = V.deal, cancel = ' <button type="button" data-do="cancel">Cancel</button>';
-    if (ui.form === 'move') { const to = R.nextStage(d.stage, V.stages); return `<form class="panel" data-form="move"><p><b>Move this deal to ${esc(to)}?</b></p><button class="primary">Move to ${esc(to)}</button>${cancel}</form>`; }
+    if (ui.form === 'move') { const to = R.nextStage(d.stage, V.stages); return `<form class="panel" data-form="move"><p><b>Move this deal to ${esc(to)}?</b></p><label>Stage note<input name="note" required maxlength="1000" placeholder="What moved this deal forward? For example: the client approved the proposal"></label><p class="mute">Saved on the deal as a note titled "Stage update: ${esc(to)}".</p><button class="primary">Move to ${esc(to)}</button>${cancel}</form>`; }
     if (ui.form === 'blocked') {
       const to = R.nextStage(d.stage, V.stages), open = R.gate(d).filter(g => g.state !== 'done'), svc = V.service.editable && !d.services.length && !R.servicesLocked(d);
       const why = R.checkMove(d, to, '-', V.stages);
@@ -315,8 +315,8 @@
       return run(() => db.setService(V, chosen), 'Service saved: ' + (chosen.join(', ') || 'Not chosen') + '.');
     }
     if (kind === 'move') {
-      const to = R.nextStage(d.stage, V.stages), err = R.checkMove(d, to, '-', V.stages);
-      return err ? say(err, true) : run(() => db.move(V, to), 'Moved to ' + to + '.');
+      const to = R.nextStage(d.stage, V.stages), err = R.checkMove(d, to, f.note, V.stages);
+      return err ? say(err, true) : run(() => db.move(V, to, f.note.trim()), 'Moved to ' + to + '.');
     }
     if (kind === 'lost') {
       const err = R.checkLost(d, f.stage, f.reason, V.stages, V.reasons);

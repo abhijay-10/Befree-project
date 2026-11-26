@@ -235,6 +235,36 @@ window.Data = (function () {
     throw new Error("Unknown option: " + opts.option);
   }
 
+  /*
+   * Marketing results worked out from Deals and Leads only (Lead Source, Stage, Closing Date, Created Time).
+   * A marketing channel is any channel except "Other / not set". from/to: the period (from = null for all time).
+   */
+  function marketingOf(deals, leads, from, to) {
+    const isMarketing = function (s) { return !!s && s !== OTHER_CHANNEL; };
+    const amount = function (l) { return sum(l, function (d) { return d.amount; }); };
+    const inPeriod = function (v) { return within(v, from, to); };
+    const closed = function (group) {
+      return deals.filter(function (d) { return d.group === group && d.closedOn && inPeriod(d.closedOn) && isMarketing(d.source); });
+    };
+    const won = closed("confirmed"), lost = closed("lost");
+    const open = deals.filter(function (d) { return d.group === "unconfirmed" && isMarketing(d.source); });
+    const fresh = leads ? leads.filter(function (l) { return inPeriod(l[FIELDS.lead.created]); }) : null;
+    const channelOf = function (l) { return sourceOf(l) || OTHER_CHANNEL; };
+    const marketingLeads = fresh && fresh.filter(function (l) { return isMarketing(channelOf(l)); });
+    return {
+      wonCount: won.length, wonAmount: amount(won), lostCount: lost.length, openCount: open.length, openAmount: amount(open),
+      leads: fresh ? fresh.length : null,
+      mktLeads: marketingLeads ? marketingLeads.length : null,
+      mktMoved: marketingLeads ? marketingLeads.filter(function (l) { return l.toDeal; }).length : null,
+      webLeads: fresh ? fresh.filter(function (l) { return channelOf(l) === "Website"; }).length : null,
+      byChannel: CHANNELS.map(function (c) {
+        const mine = (fresh || []).filter(function (l) { return channelOf(l) === c; });
+        return { channel: c, leads: mine.length, moved: mine.filter(function (l) { return l.toDeal; }).length,
+                 won: amount(won.filter(function (d) { return d.source === c; })) };
+      })
+    };
+  }
+
   // Figures of one option for the switch cards: total, per country, per service, sourced and influenced.
   function optionBlock(list, codes, influenceKnown) {
     const amount = function (l) { return sum(l, function (d) { return d.amount; }); };
@@ -612,6 +642,27 @@ window.Data = (function () {
         };
       }),
       marketingKpis: marketingKpis,
+      mkt: (function () {
+        const t = function (key, list) { return list.reduce(function (n, r) { return n + (r[key] || 0); }, 0); };
+        const now = raws.map(function (r) { return r.mkt; }), prev = raws.every(function (r) { return r.mktBefore; }) ? raws.map(function (r) { return r.mktBefore; }) : null;
+        const leadsKnown = now.every(function (x) { return x.leads !== null; });
+        const known = function (key) { return leadsKnown ? t(key, now) : null; };
+        const out = {
+          wonCount: t("wonCount", now), wonAmount: t("wonAmount", now), lostCount: t("lostCount", now),
+          openCount: t("openCount", now), openAmount: t("openAmount", now),
+          leads: known("leads"), mktLeads: known("mktLeads"), mktMoved: known("mktMoved"), webLeads: known("webLeads"),
+          byChannel: CHANNELS.map(function (c, i) {
+            return { channel: c, leads: t("leads", now.map(function (x) { return x.byChannel[i]; })), moved: t("moved", now.map(function (x) { return x.byChannel[i]; })),
+                     won: t("won", now.map(function (x) { return x.byChannel[i]; })) };
+          })
+        };
+        out.delta = prev ? {
+          wonAmount: change(out.wonAmount, t("wonAmount", prev)),
+          mktLeads: leadsKnown ? change(out.mktLeads, t("mktLeads", prev)) : undefined,
+          webLeads: leadsKnown ? change(out.webLeads, t("webLeads", prev)) : undefined
+        } : {};
+        return out;
+      })(),
       leadFunnel: leadFunnel,
       campaigns: raws.reduce(function (all, r) { return all.concat(r.campaigns); }, []).map(function (c) {
         return {
@@ -632,6 +683,7 @@ window.Data = (function () {
     const zeros = function (n) { return Array.from({ length: n }, function () { return 0; }); };
     const channelZeros = function () { return CHANNELS.map(function () { return zeros(12); }); };
     return {
+      mkt: marketingOf([], null, null), mktBefore: null,
       code: code, bdm: "", bde: "", asOf: localDay(new Date()),
       accounts: 0, confirmedAmount: 0, confirmedCount: 0, unconfirmedAmount: 0, unconfirmedCount: 0, weighted: 0,
       byBucket: bucketTotals([]), funnel: zeros(STAGES.length), services: [], confirmedDeals: [],
@@ -1184,6 +1236,8 @@ window.Data = (function () {
       funnel: STAGES.map(function (s, i) { return reached.filter(function (x) { return x >= i; }).length; }),
       services: services,
       leadStats: leadStats,
+      mkt: marketingOf(deals, leads, since),
+      mktBefore: since ? marketingOf(deals, leads, before, since) : null,
       win: winOf(last6),
       newAccounts: accounts ? newAccounts : null,
       influenced: rows.touches.size ? influenced : null, // unknown until contact engagement is recorded
@@ -1347,6 +1401,11 @@ window.Data = (function () {
     const convertedKnown = !!second && (!second.length || convertedRows.length > 0);
     if (results[4] && !convertedKnown) problems.push("converted leads");
     const seen = new Set();
+    // CRM hides converted leads from the Leads list, so they cannot be deleted there. A converted lead whose deal,
+    // account and contact were all deleted is not counted; it counts as moved to a deal only while that deal exists.
+    const dealIds = new Set(deals.map(function (d) { return d.id; }));
+    const kept = new Set([].concat(Array.from(dealIds), (results[1] || []).map(function (a) { return a.id; }), (results[2] || []).map(function (c) { return c.id; })));
+    const canCheck = !!(results[1] && results[2]);
     const leads = results[4] && convertedRows.concat(results[4]).filter(function (l) {
       if (seen.has(l.id)) return false;
       seen.add(l.id);
@@ -1356,11 +1415,12 @@ window.Data = (function () {
       const lead = Object.assign({}, l, { converted: isConverted(l) });
       lead.detail = detail && { deal: idOf(detail.deal), account: idOf(detail.account), contact: idOf(detail.contact) };
       // Moved to a deal only when CRM names the deal; a conversion without details is not assumed to have one.
-      lead.toDeal = lead.converted && !!(lead.detail && lead.detail.deal);
+      lead.toDeal = lead.converted && !!(lead.detail && lead.detail.deal) && (!canCheck || dealIds.has(lead.detail.deal));
+      lead.gone = lead.converted && canCheck && !!lead.detail && ![lead.detail.deal, lead.detail.account, lead.detail.contact].some(function (x) { return x && kept.has(x); });
       lead.convertedOn = lead.converted ? (detail && detail.convert_date) || l.Converted_Date_Time || l.Modified_Time : null;
       lead.name = l.Full_Name || [l.First_Name, l.Last_Name].filter(Boolean).join(" ") || "Lead";
       return lead;
-    });
+    }).filter(function (l) { return !l.gone; });
 
     const firstTouch = new Map();
     results[8].forEach(function (list) {

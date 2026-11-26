@@ -76,18 +76,21 @@
     function draw() {
       const o = choice[key];
       const block = data.options[o];
-      subtitle.textContent = App.optionText(o, state.range) + " · " + countryLabel(state);
+      subtitle.textContent = "Won: closing date in " + App.periodText(state.range) + " · Open: deals open today · " + countryLabel(state);
       header.replaceChildren(heading, App.optionSwitch(o, function (next) { choice[key] = next; draw(); }));
       card.dataset.option = o;
       card.dataset.total = block.amount;
-      const all = rowsOf(block).filter(function (r) { return r.value > 0; });
+      const keep = new Set(rowsOf(data.options.wonOpen).filter(function (r) { return r.value > 0; }).map(function (r) { return r.label; }));
+      const all = rowsOf(block).filter(function (r) { return keep.has(r.label); });
       const rows = all.filter(function (r) { return !r.hidden; });
       // Rows that are not shown still belong to the total, and are stated below the bars
       const left = all.filter(function (r) { return r.hidden; }).reduce(function (t, r) { return t + r.value; }, 0);
       card.dataset.rowsTotal = all.reduce(function (t, r) { return t + r.value; }, 0);
       const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.value; })));
       card.body.replaceChildren();
-      if (o === "wonOpen") card.body.appendChild(App.splitLine(data.options.won.amount, data.options.open.amount));
+      const split = App.splitLine(data.options.won.amount, data.options.open.amount);
+      if (o !== "wonOpen") split.classList.add("is-reserved");
+      card.body.appendChild(split);
       rows.forEach(function (r) {
         card.body.appendChild(App.horizontalBarRow(r.label, r.text, r.value / max * 100, color));
       });
