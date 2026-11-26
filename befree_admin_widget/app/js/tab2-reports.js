@@ -70,6 +70,7 @@
       const block = data.options[o];
       subtitle.textContent = "Won: closing date in " + App.periodText(state.range) + " · Open: deals open today · " + countryLabel(state);
       header.replaceChildren(heading, App.optionSwitch(o, function (next) { choice[key] = next; draw(); }));
+      if (card.dataset.option) card.classList.add("is-switched"); // redrawn by the switch
       card.dataset.option = o;
       card.dataset.total = block.amount;
       const keep = new Set(rowsOf(data.options.wonOpen).filter(function (r) { return r.value > 0; }).map(function (r) { return r.label; }));

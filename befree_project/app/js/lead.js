@@ -37,7 +37,7 @@
     tick: '<path d="m6 12.5 4 4 8-9"/>'
   };
   const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${shapes[n]}</svg>`;
-  const icons = { 'Temperature': 'heat', 'Account engagement': 'people', 'Next task': 'check', 'Meeting status': 'calendar', 'Touch timeline': 'clock', 'Activity': 'clock', 'Lead details': 'card', 'Notes': 'note', 'Tasks': 'check', 'Linked deals': 'deal' };
+  const icons = { 'Temperature': 'heat', 'Account engagement': 'people', 'Next task': 'check', 'Meeting status': 'calendar', 'Touch timeline': 'clock', 'Activity': 'clock', 'Lead details': 'card', 'Notes': 'note', 'Tasks': 'check', 'Linked deals': 'deal', 'Lead owner': 'people' };
   const initials = n => { const w = String(n).replace(/\(.*?\)/g, '').trim().split(/\s+/); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
   const block = (title, body, cls) => `<section class="${cls || ''}" data-card="${title.toLowerCase().replace(/\s+/g, '-')}"><h2>${icon(icons[title])}${title}</h2>${body}</section>`;
 
@@ -156,11 +156,12 @@
 
   function header() {
     const c = V.contact, a = V.account, seg = R.segment(a.staff);
-    const facts = [['Country', a.country || 'Not set'], ['Owner', a.owner || 'Unassigned']]
+    const facts = [['Country', a.country || 'Not set']]
       .concat(V.service && V.service.field ? [['Service', (c.services || []).join(', ') || 'Not chosen']] : [])
       .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
-    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(c.name))}</div><div class="who"><h1>${esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
-      <p>${c.title ? esc(c.title) + ', ' : ''}${!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)}</p></div></header>
+    const company = a.name && a.name !== 'No company' ? (!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)) : '';
+    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(company ? a.name : c.name))}</div><div class="who"><h1>${company || esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
+      <p class="person">${company ? `<b>${esc(c.name)}</b>` : ''}${c.title ? (company ? '<span class="sep"></span>' : '') + esc(c.title) : ''}</p></div></header>
       <dl class="facts">${facts.map(([k, v]) => `<div${k === 'Service' ? ' class="wide"' : ''}><dt>${k}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join('')}</dl>`;
   }
   function temperatureBlock(t) {
@@ -264,6 +265,10 @@
     return block('Touch timeline', all.length ? '<ul class="timeline">' + show.map(t => `<li class="${R.isHighIntent(t) ? 'high' : ''}"><time>${date(t.date)}</time><span><b>${esc(t.type)}</b> ${R.isHighIntent(t) ? pill('High intent', 'hot') : ''}</span><span>${esc(t.channel)}</span><span class="mute">${t.contactId === V.contact.id ? 'This contact' : esc(t.contactName)}</span></li>`).join('') + '</ul>' +
       (all.length > 6 ? `<button class="link" data-do="touches">${ui.allTouches ? 'Show fewer' : 'Show all ' + all.length}</button>` : '') : '<p class="mute">No touches recorded.</p>');
   }
+  function ownerBlock() {
+    const name = V.account.owner || 'Unassigned';
+    return block('Lead owner', `<div class="owner"><span class="face" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span><span><b>${esc(name)}</b><small>Owns this lead in CRM</small></span></div>`);
+  }
   function dealBlock() {
     if (V.problems.deals) return block('Linked deals', problem('deals'));
     const ds = R.visibleDeals(V);
@@ -278,9 +283,9 @@
     add('book', 'data-show="book"', icon('calendar') + 'Book meeting', out || pending || !!V.problems.meetings);
     if (!V.live || V.isLead) add('ai', 'data-do="ai" id="aiButton"', icon('spark') + 'AI summary', !!ui.ai && ui.ai.state === 'loading', 'ai');
     add('email', 'data-do="email"', icon('mail') + 'Send email', out);
-    add('call', 'data-do="call"', icon('phone') + 'Add call task', out);
     add('raise', 'data-do="raise"', icon('deal') + 'Convert to Deal', !ok, 'primary');
-    if (V.live) b.push(`<button data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}Open in CRM</button>`);
+    if (V.live) b.push(`<button class="icon-only" title="Open in CRM" data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}<span class="sr">Open in CRM</span></button>`);
+    const endAt = b.length; // what follows sits together at the right end
     if (ui.junk) b.push(ui.junk);
     add('optOut', 'data-show="optout"', icon('stop') + 'Opt out', out, 'quiet');
     const notes = [];
@@ -288,7 +293,8 @@
     if (R.can(V.user, 'raise') && !ok) notes.push(V.live && !V.isLead || !C.acceptOnInvite ? 'Convert to Deal unlocks after an Accepted meeting.' : !m || state === 'done' ? 'Convert to Deal unlocks after you book a meeting and send the invitation.' : m.reply === 'declined' ? 'The client declined the invitation. Book a later meeting and send its invitation to unlock Convert to Deal.' : 'Click Send email to send the meeting invitation. Convert to Deal then unlocks.');
     if (V.live && V.user.role === 'View only') notes.push(`The CRM profile "${esc(V.user.profile || 'unknown')}" is not matched to a Befree role in config.js.`);
     if (V.service && V.service.notFound && V.service.notFound.length && V.user.role === 'Admin') notes.push('These API names in config.js are not in your Leads module: ' + esc(V.service.notFound.join(', ')) + '.');
-    return `<div class="actions">${b.join('') || '<span class="mute">View only</span>'}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
+    const end = b.splice(endAt);
+    return `<div class="actions">${b.join('') || (end.length ? '' : '<span class="mute">View only</span>')}${end.length ? `<span class="end-group">${end.join('')}</span>` : ''}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
   }
   // AI summary. Drawn in its own box, so typing elsewhere on the page is not lost.
   function drawAi() {
@@ -479,9 +485,10 @@
   function render() {
     rail();
     const t = R.temperature(V);
+    $('#app').classList.toggle('fresh', ui.shown !== ui.id);
     $('#app').innerHTML = '<div class="hero' + (ui.shown === ui.id ? '' : ' enter') + '">' + header() + journey() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats"><div id="heat">' + temperatureBlock(t) + '</div>' + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
-      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + '</div></div>';
+      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + ownerBlock() + '</div></div>';
     ui.shown = ui.id;
     drawDup();
     drawAi();

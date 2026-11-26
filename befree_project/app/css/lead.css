@@ -528,3 +528,55 @@ h2 { margin-bottom: 18px; }
 .band + .facts > div { padding: 13px 16px 13px 22px; }
 .rail-top { padding: 24px 20px 20px; }
 @media (max-width: 540px) { .band { padding: 26px 20px 20px; } .band + .facts { padding: 0 20px 24px; } }
+
+/* ================= Professional finish ================= */
+:root { --pad: 48px; --head: "Plus Jakarta Sans", "Inter", "Segoe UI", system-ui, sans-serif; --border: #e6e8f2; }
+body { font-family: "Inter", "Segoe UI", system-ui, sans-serif; }
+h1, h2, h3, .big, .rail-head p, .journey b, .facts dd, .tabs button, .verdict, .owner b { font-family: var(--head); }
+h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+h1 button.link { font: inherit; color: var(--ink); text-decoration: none; }
+h1 button.link:hover:not(:disabled) { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 4px; }
+.who p.person { margin-top: 6px; font-size: 15px; color: var(--mute); }
+.who p.person b { color: var(--ink); font-weight: 600; }
+.who .sep { display: inline-block; width: 4px; height: 4px; margin: 0 10px; border-radius: 50%; background: #a7acc6; vertical-align: middle; }
+/* One left and right edge for the whole header area */
+.band { padding: 44px var(--pad) 28px; }
+.band + .facts { padding: 0 var(--pad) 40px; }
+.journey { padding-left: calc(var(--pad) - 20px); padding-right: calc(var(--pad) - 20px); }
+.actions { padding: 22px var(--pad) 28px; gap: 8px; flex-wrap: wrap; align-items: center; }
+.actions > button, .end-group > * { height: 40px; padding: 0 13px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+.actions > button.icon-only { width: 40px; padding: 0; justify-content: center; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.end-group { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+/* The tiles fill the full width, so their right edge meets Opt out */
+.facts { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.end-group > * { margin-left: 0 !important; }
+.end-group > .pill { display: inline-flex; align-items: center; }
+.hero .hint, .status-note { margin-left: var(--pad); margin-right: var(--pad); }
+.status-note { padding-left: 0; padding-right: 0; }
+.panel { margin-left: var(--pad); margin-right: var(--pad); }
+/* Cards */
+section { border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(20, 24, 60, .04), 0 12px 32px -18px rgba(40, 30, 120, .22); }
+h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
+.facts dt, .details dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.details dt { color: var(--mute); }
+.owner { display: flex; align-items: center; gap: 12px; }
+.owner .face { width: 42px; height: 42px; font-size: 14px; }
+.owner b, .owner small { display: block; }
+.owner b { font-size: 15px; font-weight: 700; }
+.owner small { color: var(--mute); }
+@media (max-width: 900px) { :root { --pad: 24px; } }
+@media (max-width: 540px) { :root { --pad: 18px; } h1 { font-size: 24px; } .end-group { margin-left: 0; } }
+
+/* Animations only when a lead is first shown, never when something on it changes */
+#app:not(.fresh) section, #app:not(.fresh) .journey .dot { animation: none !important; }
+
+/* ---------- Loading placeholder and empty list ---------- */
+.skel { display: grid; gap: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.skel i { display: block; height: 150px; border-radius: 16px; background: linear-gradient(100deg, #eceef5 30%, #f7f8fc 50%, #eceef5 70%) 0 0 / 200% 100%; animation: skel 1.3s linear infinite; }
+.skel i:first-child { grid-column: 1 / -1; height: 230px; }
+@keyframes skel { to { background-position: -200% 0; } }
+#leads > p.mute:only-child { padding: 28px 12px; text-align: center; }
+#leads > p.mute:only-child::before { content: ""; display: block; width: 34px; height: 34px; margin: 0 auto 8px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90ab' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4M8.5 11h5'/%3E%3C/svg%3E") center / contain no-repeat; }
+@media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }

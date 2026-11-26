@@ -9,7 +9,8 @@
   const $ = s => document.querySelector(s);
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
   const date = d => R.toDate(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const money = (n, symbol) => n === null || n === undefined || n === '' ? 'Not set' : (symbol === undefined ? V.deal.symbol : symbol) + Math.round(n).toLocaleString('en-GB');
+  const rupee = s => !String(s || '').trim() || /^(rs\.?|inr)$/i.test(String(s).trim()) ? '₹' : s;
+  const money = (n, symbol) => { if (n === null || n === undefined || n === '') return 'Not set'; const s = rupee(symbol === undefined ? V.deal.symbol : symbol); return s + Math.round(n).toLocaleString(s === '₹' ? 'en-IN' : 'en-GB'); };
   const pill = (text, cls) => `<span class="pill ${cls || ''}">${esc(text)}</span>`;
   const opts = (list, blank) => `<option value="">${blank}</option>` + list.map(x => `<option>${esc(x)}</option>`).join('');
   const link = (entity, id, text) => V.live && id ? `<button class="link" data-entity="${entity}" data-record="${esc(id)}">${esc(text)}</button>` : esc(text);
@@ -32,15 +33,18 @@
   };
   const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${shapes[n]}</svg>`;
   const initials = n => { const w = String(n).replace(/\(.*?\)/g, '').trim().split(/\s+/); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
-  const block = (title, ic, body, cls) => `<section class="${cls || ''}"><h2>${icon(ic)}${title}</h2>${body}</section>`;
+  const block = (title, ic, body, cls) => `<section class="${cls || ''}" data-card="${title.toLowerCase().replace(/\s+/g, '-')}"><h2>${icon(ic)}${title}</h2>${body}</section>`;
   const days = n => Math.abs(n) === 1 ? '1 day' : Math.abs(n) + ' days';
 
   /* ---------- header and stage bar ---------- */
+  // The account name is left out when the deal is already named after it
+  const plain = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const showAccount = d => !!d.accountName && !plain(d.name).includes(plain(d.accountName)) && !plain(d.accountName).includes(plain(d.name));
   function header() {
     const d = V.deal;
     const lost = R.isLost(d.stage) ? ' ' + pill(d.stage, 'bad') : R.isWon(d.stage) ? ' ' + pill(d.stage, 'good') : '';
     return `<header class="ticket"><div class="who"><h1>${esc(d.name)}${lost}</h1>
-      <p>${d.accountName ? link('Accounts', d.accountId, d.accountName) : 'No account'}<span class="sep"></span>${d.contactName ? link('Contacts', d.contactId, d.contactName) : 'No contact'}</p></div>
+      <p class="people">${[showAccount(d) ? link('Accounts', d.accountId, d.accountName) : '', d.contactName ? link('Contacts', d.contactId, d.contactName) : '<span class="mute">No contact person</span>'].filter(Boolean).join('<span class="sep"></span>')}</p></div>
       <dl class="strip"><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
       <div><dt>Service</dt><dd>${esc(d.services.join(', ') || 'Not chosen')}</dd></div><div><dt>Probability</dt><dd>${d.prob === null ? 'Not set' : d.prob + '%'}</dd></div></dl></header>`;
   }
@@ -205,8 +209,9 @@
   /* ---------- page ---------- */
   function render() {
     rail();
+    $('#app').classList.toggle('fresh', ui.shown !== ui.id);
     $('#app').innerHTML = `<div class="hero ${ui.shown === ui.id ? '' : 'enter'}">` + header() + stageBar() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
-      '<div class="stats">' + amountBlock() + closeBlock() + approvalBlock() + '</div>' +
+      '<div class="stats">' + closeBlock() + approvalBlock() + amountBlock() + '</div>' +
       '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + '</div></div>';
     ui.shown = ui.id;
   }
@@ -286,7 +291,12 @@
       $('#app').classList.add('loading');
       return reload().catch(fail);
     }
-    if (x.tab) { ui.tab = x.tab; return render(); }
+    if (x.tab) {
+      ui.tab = x.tab;
+      const card = document.querySelector('.records-card');
+      if (card) { card.outerHTML = recordsBlock(); return; } // the rest of the page stays as it is
+      return render();
+    }
     if (x.done) return run(() => db.closeTask(V, x.done), 'Task completed.');
     if (x.record) return db.open(x.entity, x.record);
     if (x.show) { ui.form = x.show; return say(null); }

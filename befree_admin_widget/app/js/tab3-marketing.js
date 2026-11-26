@@ -235,7 +235,27 @@
     return card;
   }
 
-  function mount(node) { root = node; }
+  // Clicking a card marks it as the active one (only one at a time) and shows a ripple. What the click does is unchanged.
+  let activeTitle = null;
+  function markActive() {
+    root.querySelectorAll(".mk-kpi").forEach(function (c) {
+      const t = c.querySelector(".mk-kpi-title");
+      c.classList.toggle("is-active", !!activeTitle && !!t && t.textContent === activeTitle);
+    });
+  }
+  function onCardClick(e) {
+    const card = e.target.closest(".mk-kpi");
+    if (!card) return;
+    const box = card.getBoundingClientRect(), ripple = el("span", "mk-ripple");
+    ripple.style.left = (e.clientX - box.left) + "px";
+    ripple.style.top = (e.clientY - box.top) + "px";
+    card.appendChild(ripple);
+    setTimeout(function () { ripple.remove(); }, 520);
+    activeTitle = card.querySelector(".mk-kpi-title").textContent;
+    setTimeout(markActive, 0); // a switch click redraws its card first
+  }
+
+  function mount(node) { root = node; root.addEventListener("click", onCardClick); }
 
   function render(data, state) {
     const split = el("div", "mk-split");
@@ -245,6 +265,7 @@
     if (data.campaigns && data.campaigns.length) parts.push(renderCampaigns(data, state));
     parts.push(trendCard);
     root.replaceChildren.apply(root, parts);
+    markActive();
     trendCard.draw();
   }
 

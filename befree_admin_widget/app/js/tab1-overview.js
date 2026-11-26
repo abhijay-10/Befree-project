@@ -201,7 +201,16 @@
       thead.appendChild(head);
       l.list.forEach(function (x) {
         const tr = el("tr", "is-plain");
-        [x.name, x.country, x.status, x.created, x.converted ? "Yes" : "No", x.owner || "—"].forEach(function (v) { tr.appendChild(el("td", "", v)); });
+        const who = el("span", "ov-who");
+        who.append(el("span", "ov-avatar", initialsOf(x.name)), el("b", "", x.name));
+        const nameCell = el("td");
+        nameCell.appendChild(who);
+        const statusCell = el("td");
+        statusCell.appendChild(App.pill(x.status, /junk|lost|not qualified/i.test(x.status) ? "red" : /^qualified/i.test(x.status) ? "green" : x.status === "No status" ? "grey" : "blue"));
+        tr.append(nameCell);
+        [x.country].forEach(function (v) { tr.appendChild(el("td", "", v)); });
+        tr.appendChild(statusCell);
+        [x.created, x.converted ? "Yes" : "No", x.owner || "—"].forEach(function (v) { tr.appendChild(el("td", "", v)); });
         tbody.appendChild(tr);
       });
       table.append(thead, tbody);
@@ -724,6 +733,10 @@
     ZOHO.CRM.UI.Record.open({ Entity: entity, RecordID: id });
   }
 
+  const initialsOf = function (name) {
+    const w = String(name || "?").trim().split(/\s+/);
+    return ((w[0] || "?").charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : "")).toUpperCase();
+  };
   function dealRow(d) {
     const tr = el("tr");
     tr.tabIndex = 0;
@@ -740,7 +753,14 @@
     const stageType = d.stage === "Closed-won" ? "green" : d.stage === "Closed-lost" ? "red" : "blue";
 
     [
-      el("td", "ov-deal-name", d.name),
+      (function () { // avatar, deal name, and the account under it
+        const td = el("td", "ov-deal-name");
+        const who = el("span", "ov-who");
+        who.append(el("span", "ov-avatar", initialsOf(d.account || d.name)), el("span", "ov-who-text"));
+        who.lastChild.append(el("b", "", d.name), el("small", "", d.account || "No account"));
+        td.appendChild(who);
+        return td;
+      })(),
       account,
       d.contact || "—",
       d.country || "—",
@@ -748,11 +768,15 @@
       App.formatINRFull(d.amount),
       App.pill(d.stage || "—", stageType),
       d.probability + "%",
-      d.owner || "—",
+      d.owner ? (function () {
+        const who = el("span", "ov-owner");
+        who.append(el("span", "ov-avatar is-small", initialsOf(d.owner)), d.owner);
+        return who;
+      })() : "—",
       d.close || "—"
-    ].forEach(function (content) {
+    ].forEach(function (content, i) {
       if (content.tagName === "TD") { tr.appendChild(content); return; }
-      const td = el("td");
+      const td = el("td", i === 5 || i === 7 ? "num" : ""); // value and probability
       td.append(content);
       tr.appendChild(td);
     });
@@ -835,7 +859,7 @@
     scroller.appendChild(table);
 
     COLUMNS.forEach(function (col) {
-      const th = el("th");
+      const th = el("th", col.key === "amount" || col.key === "probability" ? "num" : "");
       th.scope = "col";
       const b = button("ov-sort", col.label);
       b.addEventListener("click", function () {
@@ -895,7 +919,8 @@
       tbody.dataset.count = rows.length;
       tbody.dataset.filtered = String(!!(q || ui.country || ui.services.size));
       count.textContent = plural(rows.length, "deal");
-      position.textContent = ui.page + " / " + pages;
+      const first = rows.length ? (ui.showAll ? 1 : (ui.page - 1) * PAGE_SIZE + 1) : 0;
+      position.textContent = rows.length ? "Showing " + first + "–" + (first + visible.length - 1) + " of " + rows.length : "No deals";
       prev.disabled = ui.page <= 1;
       next.disabled = ui.page >= pages;
       viewAll.textContent = ui.showAll ? "Show less" : "View all";
@@ -940,7 +965,7 @@
     risk.append(renderForecast(data, state), Cards.atRisk(data, state));
     const leads = el("div", "ov-split ov-split-wide");
     leads.append(renderLeads(data, state), renderLeadStatus(data, state));
-    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
+    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
       renderTable(data, state));
     services.draw();
   }

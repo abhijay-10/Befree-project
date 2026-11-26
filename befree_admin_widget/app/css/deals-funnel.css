@@ -1,0 +1,43 @@
+/* Deals Pipeline funnel card (Admin Overview). Uses the admin's own variables; every class starts with df-. */
+.df-card { border-radius: 16px; }
+.df-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.df-period { height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.df-main { position: relative; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+.df-shape { display: flex; justify-content: center; }
+.df-svg { width: 100%; max-width: 360px; height: auto; overflow: visible; }
+.df-seg { cursor: pointer; transform-box: fill-box; transform-origin: center top; transition: opacity .2s, transform .2s; animation: df-grow .4s cubic-bezier(.2, .7, .3, 1) backwards; }
+@keyframes df-grow { from { opacity: 0; transform: scale(.7, .4); } }
+.df-legend { list-style: none; margin: 0; padding: 0; }
+.df-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 10px; border-radius: 10px; cursor: pointer; transition: opacity .2s, background-color .2s; }
+.df-legend li + li { border-top: 1px solid var(--border); }
+.df-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.df-legend span { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.df-legend b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.df-main.has-focus .df-seg, .df-main.has-focus .df-legend li { opacity: .4; }
+.df-main.has-focus .df-seg.is-on { opacity: 1; transform: scale(1.03); }
+.df-main.has-focus .df-legend li.is-on { opacity: 1; background: #f4f6fc; }
+.df-tip { position: absolute; z-index: 3; max-width: 260px; padding: 7px 11px; border-radius: 9px; background: #111827; color: #fff; font-size: 12px; pointer-events: none; white-space: nowrap; }
+.df-tip[hidden] { display: none; }
+.df-conv { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fafbfe; }
+.df-conv-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.df-conv-head span { flex: 1; font-weight: 600; }
+.df-conv-head strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.df-chevron { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .25s; }
+.df-conv-head[aria-expanded="true"] .df-chevron { transform: rotate(180deg); }
+.df-conv-note { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.df-drop { list-style: none; margin: 10px 0 0; padding: 0; }
+.df-drop[hidden] { display: none; }
+.df-drop li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.df-drop b { font-variant-numeric: tabular-nums; color: var(--green); white-space: nowrap; }
+.df-drop b.is-down { color: var(--red); }
+.df-drop b.is-flat { color: var(--muted); }
+.df-empty { padding: 44px 12px; text-align: center; color: var(--muted); }
+.df-empty::before { content: ""; display: block; width: 54px; height: 40px; margin: 0 auto 12px; background: linear-gradient(180deg, #cfc4f6, #c3d4fb); clip-path: polygon(0 0, 100% 0, 66% 100%, 34% 100%); }
+.df-empty b { display: block; color: #111827; margin-bottom: 4px; }
+.panel[aria-busy="true"] .df-card .card-body { position: relative; opacity: .45; animation: df-pulse 1s ease-in-out infinite alternate; }
+@keyframes df-pulse { to { opacity: .2; } }
+@media (max-width: 760px) { .df-main { grid-template-columns: minmax(0, 1fr); gap: 16px; } .df-header { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) {
+  .df-seg, .df-chevron, .df-legend li, .panel[aria-busy="true"] .df-card .card-body { animation: none !important; transition: none !important; }
+  .df-main.has-focus .df-seg.is-on { transform: none; }
+}

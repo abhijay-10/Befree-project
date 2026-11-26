@@ -498,3 +498,56 @@ h2 { margin-bottom: 16px; }
 .strip > div { padding: 14px 28px 15px; }
 .rail-top { padding: 26px 22px 22px; }
 @media (max-width: 720px) { .who { padding: 26px 20px 20px; } .strip { margin: 0 14px 20px; } }
+
+/* ================= Professional fonts ================= */
+:root { --head: "Plus Jakarta Sans", "Inter", "Segoe UI", system-ui, sans-serif; --num: var(--head); }
+h1, h2, .big, .rail-top p, .journey b, .strip dd, .tabs button, .gate b, .txt b { font-family: var(--head); }
+h1 { font-weight: 800; letter-spacing: -.02em; }
+h2 { font-weight: 700; }
+.strip dt, .details dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ================= Professional finish ================= */
+:root { --pad: 40px; }
+/* Animations only when a deal is first shown, never when something on it changes */
+#app:not(.fresh) section, #app:not(.fresh) .cols > .stack, #app:not(.fresh) .records li, #app:not(.fresh) .journey li.next .dot { animation: none !important; }
+/* Header: roomy, and one left and right edge for everything in it */
+.who { padding: 44px var(--pad) 26px; }
+.who p.people { margin-top: 8px; font-size: 15px; }
+.strip { margin: 0 var(--pad) 32px; }
+.journey { margin: 26px var(--pad) 22px; }
+.actions { margin: 0 var(--pad) 20px; }
+.hero .hint { margin: 0 var(--pad) 14px; }
+.panel { margin: 0 var(--pad) 22px; }
+/* Calm, solid buttons */
+button.primary, button.primary:not(:disabled) { background: var(--teal-dark); border-color: var(--teal-dark); color: #fff; box-shadow: 0 1px 2px rgba(15, 60, 70, .2); filter: none; }
+button.primary:hover:not(:disabled) { background: #0b5550; border-color: #0b5550; color: #fff; filter: none; }
+.actions { background: #fff; border: 1px solid var(--rule-dark); padding: 6px; }
+.actions button { height: 38px; font-size: 13.5px; font-weight: 600; }
+.actions button:hover:not(:disabled) { transform: none; }
+.actions button:not(.primary):hover:not(:disabled) { background: var(--teal-tint); color: var(--teal-dark); }
+.tabs { background: #f1f5f6; box-shadow: inset 0 0 0 1px var(--rule); }
+.tabs button { font-weight: 600; color: var(--mute); }
+.tabs button[aria-pressed=true] { background: #fff; color: var(--teal-dark); box-shadow: 0 1px 3px rgba(15, 40, 50, .16); }
+#count { background: var(--teal-dark); color: #fff; }
+[aria-current=true] .face { background: var(--teal-dark); color: #fff; }
+.gate.steps li::before { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--teal-dark); }
+.meter i.done { background: var(--teal); }
+/* Number cards: white with a thin accent, numbers in dark text */
+.stats section, .stats section:nth-child(1), .stats section.is-hot { background: #fff; }
+.stats section::before { height: 3px; background: var(--c); }
+.stats section[data-card=close-date] { --c: #4f46e5; animation-delay: 0s; }
+.stats section[data-card=approvals] { --c: #d97706; animation-delay: .06s; }
+.stats section[data-card=amount] { --c: #0f766e; animation-delay: .12s; }
+.stats section.is-hot { --c: #dc2626; }
+.stats .big { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--ink); }
+@media (max-width: 720px) { :root { --pad: 16px; } .who { padding: 26px var(--pad) 18px; } }
+
+/* ---------- Loading placeholder and empty list ---------- */
+.skel { display: grid; gap: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.skel i { display: block; height: 150px; border-radius: 16px; background: linear-gradient(100deg, #eceef5 30%, #f7f8fc 50%, #eceef5 70%) 0 0 / 200% 100%; animation: skel 1.3s linear infinite; }
+.skel i:first-child { grid-column: 1 / -1; height: 230px; }
+@keyframes skel { to { background-position: -200% 0; } }
+#items > p.mute:only-child { padding: 28px 12px; text-align: center; }
+#items > p.mute:only-child::before { content: ""; display: block; width: 34px; height: 34px; margin: 0 auto 8px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90ab' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4M8.5 11h5'/%3E%3C/svg%3E") center / contain no-repeat; }
+@media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }

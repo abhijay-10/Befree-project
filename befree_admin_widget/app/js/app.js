@@ -333,6 +333,32 @@ window.App = (function () {
     document.getElementById("breadcrumb").textContent = [BRAND, page, countryLabel(Store.state)].join(" / ");
   }
 
+  // Animates each KPI number from 0 to the text already shown, then puts back that exact text.
+  // Only the display changes. Values that are not numbers (for example "Email") just fade in.
+  function countUp(panel) {
+    const quiet = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.querySelectorAll(".mk-kpi-value, .ov-kpi-value").forEach(function (node) {
+      const final = node.textContent;
+      const m = /^(\D*?)(\d[\d,]*(?:\.\d+)?)(.*)$/.exec(final);
+      if (quiet) return;
+      if (!m) { node.classList.add("kpi-fade"); return; }
+      const target = parseFloat(m[2].replace(/,/g, "")), decimals = (m[2].split(".")[1] || "").length, grouped = m[2].indexOf(",") !== -1;
+      const show = function (v) {
+        const text = grouped ? v.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : v.toFixed(decimals);
+        node.textContent = m[1] + text + m[3];
+      };
+      const start = performance.now();
+      const step = function (now) {
+        if (!node.isConnected) return;
+        const t = Math.min(1, (now - start) / 800), eased = 1 - Math.pow(1 - t, 3);
+        if (t < 1) { show(target * eased); requestAnimationFrame(step); } else node.textContent = final;
+      };
+      show(0);
+      requestAnimationFrame(step);
+      setTimeout(function () { node.textContent = final; }, 1000); // the true value, with or without animation
+    });
+  }
+
   async function renderTab(id) {
     const tab = tabs[id];
     if (!tab) return;
@@ -358,6 +384,7 @@ window.App = (function () {
       }
       tab.render(data, state);
       Checks.run(id, data, state);
+      countUp(panel);
       document.getElementById("last-updated").textContent =
         "Last updated " + new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
     } catch (err) {
@@ -470,8 +497,16 @@ window.App = (function () {
     // TODO: actions for #global-search and #notifications-btn
   }
 
+  // One look for every chart: dashed gridlines and a dark rounded tooltip. Data and datasets are untouched.
+  function styleCharts() {
+    if (!window.Chart || !Chart.defaults) return;
+    Chart.defaults.set("scale", { grid: { color: "#E8EBF3" }, border: { dash: [4, 4] } });
+    Chart.defaults.set("plugins.tooltip", { backgroundColor: "#111827", titleColor: "#fff", bodyColor: "#fff", cornerRadius: 10, padding: 10 });
+  }
+
   // Runs after all tab scripts have registered.
   document.addEventListener("DOMContentLoaded", function () {
+    styleCharts();
     initZoho();
     bindEvents();
     Object.keys(tabs).forEach(function (id) { tabs[id].mount(document.getElementById("panel-" + id)); });

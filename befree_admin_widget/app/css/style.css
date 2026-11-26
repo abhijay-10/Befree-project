@@ -685,3 +685,191 @@ button { cursor: pointer; }
 @media (max-width: 560px) { .rp-owner { grid-template-columns: 90px minmax(0, 1fr); } .rp-owner-value { grid-column: 2; } }
 
 .mk-kpi.no-anim { animation: none; }
+
+/* ================= Professional fonts ================= */
+:root { --head: "Plus Jakarta Sans", "Inter", system-ui, sans-serif; }
+.page-title, .card-title, .ov-kpi-value, .ov-kpi-label, .mk-kpi-value, .mk-kpi-title, .fc-stat strong, .nc-stat strong, .tab, .ov-badge { font-family: var(--head); }
+.page-title { font-weight: 800; letter-spacing: -.02em; }
+.card-title { font-weight: 700; letter-spacing: -.01em; }
+.ov-kpi-value, .mk-kpi-value { font-weight: 800; letter-spacing: -.02em; }
+
+/* ===================== Design tokens (shared by KPI cards and tables) ===================== */
+:root {
+  --ui-radius: 12px; --ui-radius-sm: 10px; --ui-control: 40px;
+  --ui-shadow: 0 1px 2px rgba(16, 24, 40, .05); --ui-shadow-hover: 0 14px 30px -14px rgba(20, 40, 120, .30);
+  --ui-ease: cubic-bezier(.2, .7, .3, 1); --ui-head-bg: #F7F8FB; --ui-row-hover: #F5F8FF;
+}
+
+/* ===================== KPI cards: equal size, same structure ===================== */
+.mk-kpis { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; }
+.mk-kpis-extra { grid-template-columns: repeat(4, 1fr); }
+.mk-kpi { --kpi-accent: var(--tone); min-height: 248px; height: 100%; display: flex; flex-direction: column; }
+.mk-kpi-slot { height: 100%; }
+.mk-kpi-option { margin-top: auto; }                       /* extra details pinned to the bottom */
+.mk-kpi-option + .mk-kpi-from { margin-top: 12px; }
+.mk-kpi-from { margin-top: auto; border-top: 1px dashed var(--border); }
+.ov-kpis { grid-auto-rows: 1fr; }
+.ov-kpi { min-height: 168px; height: 100%; position: relative; overflow: hidden; }
+.ov-kpis > .ov-kpi:nth-child(1) { --kpi-accent: #2352E5; } .ov-kpis > .ov-kpi:nth-child(2) { --kpi-accent: #7C5CE0; }
+.ov-kpis > .ov-kpi:nth-child(3) { --kpi-accent: #0d9488; } .ov-kpis > .ov-kpi:nth-child(4) { --kpi-accent: #E8890C; }
+.ov-kpis > .ov-kpi:nth-child(5) { --kpi-accent: #16A06B; } .ov-kpis > .ov-kpi:nth-child(6) { --kpi-accent: #db2777; }
+
+/* Top accent bar (with a one-time shimmer on the Marketing cards) */
+.mk-kpi::before, .ov-kpi::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--kpi-accent); transform-origin: top; transition: transform .2s ease; z-index: 1; }
+.mk-kpi::after { content: ""; position: absolute; inset: 0 0 auto; height: 3px; z-index: 2; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent); transform: translateX(-100%); animation: kpi-shimmer 1.2s ease-out .5s 1 both; }
+@keyframes kpi-shimmer { to { transform: translateX(100%); } }
+
+/* Entrance: fade and slide up 12px, 60ms apart */
+.mk-kpi, .ov-kpi { animation: kpi-in .45s var(--ui-ease) backwards; }
+@keyframes kpi-in { from { opacity: 0; transform: translateY(12px); } }
+.mk-kpis > :nth-child(1) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(1), .ov-kpis > .ov-kpi:nth-child(1) { animation-delay: 0ms; }
+.mk-kpis > :nth-child(2) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(2), .ov-kpis > .ov-kpi:nth-child(2) { animation-delay: 60ms; }
+.mk-kpis > :nth-child(3) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(3), .ov-kpis > .ov-kpi:nth-child(3) { animation-delay: 120ms; }
+.mk-kpis > :nth-child(4) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(4), .ov-kpis > .ov-kpi:nth-child(4) { animation-delay: 180ms; }
+.mk-kpis > :nth-child(5) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(5), .ov-kpis > .ov-kpi:nth-child(5) { animation-delay: 240ms; }
+.mk-kpis > :nth-child(6) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(6) { animation-delay: 300ms; }
+.mk-kpis > :nth-child(7) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(7) { animation-delay: 360ms; }
+.mk-kpis > :nth-child(8) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(8) { animation-delay: 420ms; }
+.mk-kpi.no-anim, .mk-kpi.no-anim::after { animation: none; }
+.kpi-fade { animation: kpi-fade .6s ease-out; }
+@keyframes kpi-fade { from { opacity: 0; } }
+
+/* Hover: Marketing lifts 4px; Overview and Reports lift lightly */
+.mk-kpi { transition: transform .2s ease, box-shadow .2s ease; }
+.mk-kpi:hover { transform: translateY(-4px); box-shadow: var(--ui-shadow-hover); }
+.mk-kpi:hover::before { transform: scaleY(1.7); }
+.mk-kpi-icon { transition: transform .2s ease; }
+.mk-kpi:hover .mk-kpi-icon { transform: translateY(-2px) scale(1.06); }
+.ov-kpi { transition: transform .2s ease, box-shadow .2s ease; }
+.ov-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -16px rgba(20, 40, 120, .3); }
+.ov-tile { transition: transform .2s ease; }
+.ov-kpi:hover .ov-tile { transform: scale(1.05); }
+
+/* Active (clicked) Marketing card: thin Instagram-colour border and a faint glow */
+.mk-kpi.is-active { border-color: transparent;
+  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(135deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5) border-box;
+  border-width: 1.5px; box-shadow: 0 10px 28px -12px rgba(214, 41, 118, .15), 0 0 0 4px rgba(150, 47, 191, .05); }
+.mk-ripple { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; pointer-events: none; z-index: 3;
+  background: radial-gradient(circle, rgba(214, 41, 118, .35), rgba(79, 91, 213, .15) 60%, transparent 70%); animation: mk-ripple .5s ease-out forwards; }
+@keyframes mk-ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(14); opacity: 0; } }
+
+/* Report cards: the same top accent and a light lift */
+.rp-grid > .card { position: relative; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
+.rp-grid > .card::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--blue); opacity: .85; }
+.rp-grid > .card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -16px rgba(20, 40, 120, .3); }
+
+/* ===================== Won only / Won + Open: the active pill slides ===================== */
+.opt-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; isolation: isolate; }
+.opt-switch::before { content: ""; position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px;
+  background: #fff; box-shadow: 0 1px 3px rgba(17, 24, 39, .18); transition: transform .25s var(--ui-ease), background-color .25s; }
+.opt-switch:has(button:last-child[aria-pressed="true"])::before { transform: translateX(100%); background: linear-gradient(90deg, #16A06B, #2352E5); }
+.opt-switch button, .opt-switch button[aria-pressed="true"], .opt-switch button:last-child[aria-pressed="true"] { background: transparent; box-shadow: none; text-align: center; }
+.opt-switch button[aria-pressed="true"] { color: var(--blue); }
+.opt-switch button:last-child[aria-pressed="true"] { color: #fff; }
+/* A redrawn card shows the pill arriving from the other side */
+.no-anim .opt-switch:has(button:last-child[aria-pressed="true"])::before, .is-switched .opt-switch:has(button:last-child[aria-pressed="true"])::before { animation: opt-right .25s var(--ui-ease); }
+.no-anim .opt-switch:has(button:first-child[aria-pressed="true"])::before, .is-switched .opt-switch:has(button:first-child[aria-pressed="true"])::before { animation: opt-left .25s var(--ui-ease); }
+@keyframes opt-right { from { transform: translateX(0); } }
+@keyframes opt-left { from { transform: translateX(100%); } }
+
+/* ===================== Deal and lead tables ===================== */
+.ov-toolbar { gap: 10px; align-items: center; }
+.ov-toolbar .search, .ov-toolbar .select select { height: var(--ui-control); border-radius: var(--ui-radius-sm); }
+.ov-toolbar .search { transition: border-color .15s, box-shadow .15s; }
+.ov-toolbar .search:focus-within, .ov-toolbar .select select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(35, 82, 229, .14); outline: none; }
+.ov-toolbar .select select { transition: border-color .15s, box-shadow .15s; }
+.ov-table-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--border); border-radius: var(--ui-radius); background: #fff; }
+.ov-table { font-size: 14px; }
+.ov-table thead th { position: sticky; top: 0; z-index: 1; background: var(--ui-head-bg); color: var(--muted); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; padding-top: 11px; padding-bottom: 11px; }
+.ov-table thead th .ov-sort { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.ov-table th:first-child, .ov-table td:first-child { padding-left: 16px; }
+.ov-table th:last-child, .ov-table td:last-child { padding-right: 16px; }
+.ov-table tbody td { height: 54px; padding-top: 8px; padding-bottom: 8px; vertical-align: middle; }
+.ov-table tbody tr { transition: background-color .15s; animation: row-in .3s ease-out backwards; }
+.ov-table tbody tr:hover { background: var(--ui-row-hover); }
+.ov-table tbody tr:nth-child(2) { animation-delay: 30ms; } .ov-table tbody tr:nth-child(3) { animation-delay: 60ms; }
+.ov-table tbody tr:nth-child(4) { animation-delay: 90ms; } .ov-table tbody tr:nth-child(5) { animation-delay: 120ms; }
+.ov-table tbody tr:nth-child(n+6) { animation-delay: 150ms; }
+@keyframes row-in { from { opacity: 0; } }
+.ov-table tbody tr:last-child td { border-bottom: 0; }
+.ov-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ov-table thead th.num .ov-sort { margin-left: auto; }
+.ov-who { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.ov-avatar { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--blue-pale); color: var(--blue); font-size: 12px; font-weight: 700; }
+.ov-who-text { display: grid; min-width: 0; }
+.ov-who-text b { font-weight: 600; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-who-text small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.ov-table .pill { display: inline-flex; align-items: center; gap: 6px; }
+.ov-table .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
+.ov-empty { padding: 36px 0 !important; height: auto !important; }
+.ov-empty::before { content: ""; display: block; width: 36px; height: 36px; margin: 0 auto 10px; border-radius: 50%; background: var(--blue-pale)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232352E5' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") center / 18px no-repeat; }
+.ov-table-footer { padding: 14px 4px 0; }
+.ov-pager { gap: 8px; font-size: 13px; color: var(--muted); }
+.ov-pager .btn-icon { transition: background-color .15s, border-color .15s; }
+
+@media (max-width: 1200px) { .mk-kpis, .mk-kpis-extra { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .mk-kpis, .mk-kpis-extra { grid-template-columns: 1fr; } .mk-kpi { min-height: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mk-kpi, .ov-kpi, .mk-kpi::after, .kpi-fade, .ov-table tbody tr, .mk-ripple, .opt-switch::before, .rp-grid > .card { animation: none !important; transition: none !important; }
+  .mk-kpi:hover, .ov-kpi:hover, .rp-grid > .card:hover { transform: none; }
+  .mk-kpi:hover::before, .mk-kpi:hover .mk-kpi-icon, .ov-kpi:hover .ov-tile { transform: none; }
+}
+
+/* Overview cards use the same order as Marketing: icon + title, then value and description */
+.ov-kpi { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr; column-gap: 10px; align-content: start; }
+.ov-kpi-top { display: contents; }
+.ov-kpi .ov-tile { grid-column: 1; grid-row: 1; }
+.ov-kpi-label { grid-column: 2; grid-row: 1; align-self: center; line-height: 1.3; }
+.ov-kpi .ov-delta { grid-column: 3; grid-row: 1; align-self: center; }
+.ov-kpi-value { grid-column: 1 / -1; grid-row: 2; }
+.ov-kpi > .ov-kpi-sub { grid-column: 1 / -1; }
+.ov-kpi .sparkline { grid-column: 1 / -1; align-self: end; width: 100%; }
+@media (max-width: 560px) { .ov-kpis { grid-template-columns: 1fr; } .ov-kpi { min-height: 0; } }
+@media (prefers-reduced-motion: reduce) { .mk-ripple { display: none; } .mk-kpi::before, .ov-kpi::before, .mk-kpi-icon, .ov-tile { transition: none !important; } }
+
+/* ===================== Soft tinted page, pastel KPI cards ===================== */
+:root { --page-bg: #F4F5FB; --ui-grid: #E8EBF3; }
+.content { background: radial-gradient(900px 420px at 0 0, rgba(124, 92, 224, .07), transparent 70%), radial-gradient(900px 420px at 100% 0, rgba(35, 82, 229, .07), transparent 70%); }
+.mk-kpi, .ov-kpi { border-radius: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--kpi-accent) 7%, #fff), #fff 62%); }
+.ov-kpi .ov-tile { color: var(--kpi-accent); background: color-mix(in srgb, var(--kpi-accent) 12%, #fff); }
+.mk-kpi-value, .ov-kpi-value, .nc-stat strong, .fc-stat strong, .ov-table td.num { font-variant-numeric: tabular-nums; }
+/* Trend chip beside the value */
+.ov-kpi:has(.ov-delta) .ov-kpi-value { grid-column: 1 / 3; }
+.ov-kpi .ov-delta { grid-column: 3; grid-row: 2; align-self: end; margin-bottom: 4px; }
+
+/* ===================== Charts: legend at the top right, light dashed gridlines ===================== */
+.card-body:has(> .ov-legend, > .rp-legend, > .fc-legend) { display: flex; flex-direction: column; }
+.card-body > .ov-legend, .card-body > .rp-legend, .card-body > .fc-legend { order: -1; justify-content: flex-end; margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.ov-chart-bars { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 0,
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 33%,
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 66%; }
+.ov-chart-bar { position: relative; }
+.ov-chart-bar::after, .hbar-fill::after, .ov-funnel-bar::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0)); pointer-events: none; }
+.hbar-track { height: 7px; }
+.hbar-fill, .ov-funnel-bar { position: relative; }
+.ov-funnel-bar { border-radius: 8px; }
+
+/* ===================== Activity rows: coloured left edge on a soft tint ===================== */
+.ov-activity { --edge: var(--blue); padding: 11px 12px; border-left: 3px solid var(--edge); border-radius: 10px; background: color-mix(in srgb, var(--edge) 5%, #fff); }
+.ov-activity + .ov-activity { margin-top: 8px; border-top: 0; }
+.ov-activity:has(.pill-green) { --edge: var(--green); }
+.ov-activity:has(.pill-red) { --edge: var(--red); }
+.ov-activity:has(.pill-orange) { --edge: var(--orange); }
+
+/* ===================== Tables: owner initials, hover cue, loading rows ===================== */
+.ov-owner { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.ov-avatar.is-small { width: 24px; height: 24px; font-size: 10px; }
+.ov-table tbody tr:not(.is-plain) td:last-child:not(.ov-empty)::after { content: "›"; display: inline-block; margin-left: 10px; color: var(--blue); font-size: 18px; line-height: 1; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
+.ov-table tbody tr:not(.is-plain):hover td:last-child::after, .ov-table tbody tr:focus-visible td:last-child::after { opacity: 1; transform: none; }
+.panel[aria-busy="true"] .ov-table tbody td { color: transparent; position: relative; }
+.panel[aria-busy="true"] .ov-table tbody td > * { visibility: hidden; }
+.panel[aria-busy="true"] .ov-table tbody td::before { content: ""; position: absolute; left: 10px; right: 10px; top: 50%; height: 10px; margin-top: -5px; border-radius: 6px; background: #E9ECF4; animation: ui-pulse 1s ease-in-out infinite alternate; }
+@keyframes ui-pulse { to { opacity: .45; } }
+
+/* Buttons and inputs: quick transitions and a clear focus ring */
+button, input, select { transition: background-color .15s, border-color .15s, box-shadow .15s, color .15s; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { button, input, select, .ov-table tbody tr td::after, .panel[aria-busy="true"] .ov-table tbody td::before { animation: none !important; transition: none !important; } }
