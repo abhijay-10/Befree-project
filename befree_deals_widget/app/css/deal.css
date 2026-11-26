@@ -551,3 +551,9 @@ button.primary:hover:not(:disabled) { background: #0b5550; border-color: #0b5550
 #items > p.mute:only-child::before { content: ""; display: block; width: 34px; height: 34px; margin: 0 auto 8px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90ab' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4M8.5 11h5'/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
+
+/* ---------- Bigger company name; two items left in the header strip ---------- */
+h1 { font-size: 40px; line-height: 1.12; }
+.strip { grid-template-columns: minmax(0, 1fr) minmax(130px, auto); }
+.strip > div:nth-child(2) { grid-column: auto; grid-row: auto; border-left: 1px solid var(--rule); border-top: 0; }
+@media (max-width: 720px) { h1 { font-size: 30px; } }

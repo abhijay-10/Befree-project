@@ -1,0 +1,57 @@
+/* Visual polish for five widgets. Every selector starts from .pz-card, so nothing else changes. */
+.card.pz-card { --accent: #2563EB; position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, #fff), #fff 96px); box-shadow: var(--ui-shadow, 0 1px 2px rgba(16, 24, 40, .05));
+  transition: transform .2s ease, box-shadow .2s ease; animation: pz-in .45s cubic-bezier(.2, .7, .3, 1) backwards; }
+.card.pz-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--accent); opacity: 1; }
+.card.pz-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--accent) 55%, #1e2858); }
+.card.pz-country, .card.pz-leads { animation-delay: 60ms; }
+.card.pz-service { animation-delay: 120ms; }
+@keyframes pz-in { from { opacity: 0; transform: translateY(12px); } }
+.pz-card > .card-body { flex: 1; display: flex; flex-direction: column; }
+.pz-card .card-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 700; }
+.pz-card .card-subtitle { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.pz-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 13%, #fff); color: var(--accent); }
+.pz-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Rows: hover highlight, numbers that line up */
+.pz-card .pz-row { --row: var(--accent); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 10px; transition: background-color .15s; }
+.pz-card .pz-row:hover { background: color-mix(in srgb, var(--row) 7%, transparent); }
+.pz-card .pz-row:hover :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span, .ov-funnel-bar::before) { filter: brightness(1.12); }
+.pz-card :is(.hbar-value, .rp-attr-value, .mk-lead-value) { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.pz-card .pz-row.is-zero :is(.hbar-label, .hbar-value, .rp-attr-label, .rp-attr-value) { color: #9aa1b4; font-weight: 500; }
+.pz-fade { animation: pz-fade .6s ease-out; }
+@keyframes pz-fade { from { opacity: 0; } }
+
+/* Bars: soft gradient, round ends, light track, growing from the left */
+.pz-card .hbar { grid-template-columns: minmax(80px, 170px) minmax(0, 1fr) auto; }
+.pz-card .hbar-track { height: 9px; background: #eef0f7; }
+.pz-card .hbar-fill { background: linear-gradient(90deg, color-mix(in srgb, var(--row) 55%, #fff), var(--row)) !important; border-radius: 99px; }
+.pz-channel .rp-attr-bar { height: 9px; border-radius: 99px; background: linear-gradient(90deg, #93A5F8, #3B49DF) !important; }
+.pz-channel .rp-attr-row:not(.rp-attr-total) .rp-attr-bars { justify-content: center; height: 9px; border-radius: 99px; background: #eef0f7; }
+.pz-leads .mk-lead-bar { border-radius: 99px; background: #eef0f7; }
+.pz-leads .mk-lead-bar > span { border-radius: 99px; background: linear-gradient(90deg, #C3D0FB, #7E98EE); }
+.pz-leads .mk-lead-bar > .mk-lead-moved { background: linear-gradient(90deg, #5FD0A2, #12925F); }
+.pz-card :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span) { transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+@keyframes pz-grow { from { transform: scaleX(0); } }
+
+/* Stages: the bar colour sits behind the text, so it can grow without stretching the words */
+.pz-stage .ov-funnel-bar[data-check="bucket"] { position: relative; isolation: isolate; border-radius: 99px; background: transparent !important; }
+.pz-stage .ov-funnel-bar::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 99px; background: linear-gradient(90deg, var(--row), color-mix(in srgb, var(--row) 78%, #fff)); transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+.pz-stage .ov-funnel-bar::after { display: none; }
+.pz-stage .ov-funnel-bar.is-empty::before { background: #eef0f7; }
+.pz-badge { display: inline-block; min-width: 40px; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--row) 13%, #fff); color: var(--row); font-size: 11.5px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Totals pinned to the bottom */
+.pz-stage .ov-stage-total { margin: auto 0 0; align-self: flex-start; padding: 7px 14px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 9%, #fff); color: color-mix(in srgb, var(--accent) 80%, #111); }
+.pz-stage .ov-funnel-row:last-of-type { margin-bottom: 14px; }
+.pz-channel .rp-attr-total { margin: auto -8px 0; padding: 10px 8px; border-top: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, #fff); }
+.pz-channel .rp-legend .rp-dot { background: #3B49DF !important; border-radius: 50%; }
+
+@media (max-width: 560px) {
+  .pz-card .hbar { grid-template-columns: minmax(70px, 120px) minmax(0, 1fr) auto; gap: 8px; }
+  .pz-channel .rp-attr-row { grid-template-columns: 90px minmax(0, 1fr) auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card.pz-card, .pz-card *, .pz-card *::before { animation: none !important; transition: none !important; }
+  .card.pz-card:hover { transform: none; }
+}
