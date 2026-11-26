@@ -136,7 +136,7 @@
         ['Rating', c[L.rating]], ['Employees', c[L.staff]], ['City', c[L.city]], ['Website', c[L.website]]
       ],
       missing: { touches: !hasTouches, outcome: !L.outcome, reschedules: !L.reschedules || !L.backToColdOn || !L.outcome },
-      user: { id: u.id, name: u.id, label: u.full_name || '', role: C.profiles[u.profile && u.profile.name] || 'View only', profile: u.profile && u.profile.name, country: null },
+      user: { id: u.id, name: u.id, label: u.full_name || '', email: u.email || '', role: C.profiles[u.profile && u.profile.name] || 'View only', profile: u.profile && u.profile.name, country: null },
       contact: {
         id: c.id, name: person(c), services: service.field ? many(c[service.field]) : [], title: c[L.title], email: c[L.email], lifecycle: L.lifecycle ? c[L.lifecycle] || '' : '', status: c[L.status] || '',
         optedOut: !!c[L.optedOut], backToColdOn: (L.backToColdOn && c[L.backToColdOn]) || null
@@ -234,22 +234,36 @@
       if (!v.isLead) await update(M.contact, { id: v.contact.id, [F.contact.lifecycle]: 'Meeting booked' });
       else if (C.lead.lifecycle) await update('Leads', { id: v.contact.id, [C.lead.lifecycle]: 'Meeting booked' });
     },
-    // Adds the lead to the meeting and lets CRM email its own invitation. The meeting is read again to confirm it.
+    // Sends the meeting invitation. Zoho does not reliably email meeting invitations when a meeting is saved
+    // through the API (the participant's "invited" flag stays false), so the widget no longer waits for that.
+    // 1. The lead is added to the meeting as a participant, without Zoho's own notification (no double email).
+    // 2. The invitation is emailed to the lead with CRM's Send Mail, from the signed-in user's CRM email address.
+    //    CRM answers whether the email was accepted, so the widget knows it went out.
+    // 3. A note on the lead records it (this note is what unlocks Convert to Deal).
     async invite(v, m) {
+      const from = v.user && v.user.email;
+      if (!from) throw new Error('Your CRM user has no email address, so the invitation cannot be sent from CRM.');
+      if (!v.contact.email) throw new Error('This lead has no email address.');
       const meeting = await one(M.meeting, m.id);
-      const guests = (meeting.Participants || []).map(p => ({ id: p.id, type: p.type, participant: id(p.participant) }));
-      if (!guestOf(meeting, v.contact.id, v.contact.email)) guests.push({ type: 'lead', participant: v.contact.id });
-      await update(M.meeting, { id: m.id, Participants: guests, $send_notification: true });
-      // CRM marks the invitation a moment after saving the meeting, so the meeting is read a few times
-      let guest = null;
-      for (const wait of C.inviteChecks) {
-        await new Promise(done => setTimeout(done, wait));
-        guest = await one(M.meeting, m.id).then(r => guestOf(r, v.contact.id, v.contact.email), () => guest);
-        if (guest && guest.invited !== false) break;
+      if (!guestOf(meeting, v.contact.id, v.contact.email)) {
+        const guests = (meeting.Participants || []).map(p => ({ id: p.id, type: p.type, participant: id(p.participant) }));
+        await update(M.meeting, { id: m.id, Participants: guests.concat({ type: 'lead', participant: v.contact.id }), $send_notification: false });
       }
-      if (!guest) throw new Error('CRM did not add this lead to the meeting.');
-      if (guest.invited === false) throw new Error('CRM added this lead to the meeting but has not marked it as invited yet. Reload this lead in a minute to check, or send the invitation from the meeting in CRM.');
-      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Leads', RecordID: v.contact.id, Title: C.inviteNote, Content: 'To ' + v.contact.email + ' for the meeting on ' + new Date(m.start).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.' }));
+      const html = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+      const start = new Date(meeting[F.meeting.start] || m.start), end = new Date(meeting[F.meeting.end] || start.getTime() + 1800000);
+      const when = start.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+      const minutes = Math.max(1, Math.round((end - start) / 60000));
+      const title = meeting[F.meeting.title] || 'Meeting with ' + v.contact.name;
+      const host = (v.user && v.user.label) || from;
+      const content = `<p>Hi ${html(v.contact.name)},</p><p>You are invited to a meeting with ${html(host)}.</p>` +
+        `<p><b>${html(title)}</b><br>${html(when)}<br>Duration: ${minutes} minutes</p>` +
+        `<p>Please reply to this email to confirm, or to suggest another time.</p><p>Kind regards,<br>${html(host)}</p>`;
+      await saved(ZOHO.CRM.API.sendMail({ Entity: 'Leads', RecordID: v.contact.id, APIData: { data: [{
+        from: { user_name: host, email: from }, to: [{ user_name: v.contact.name, email: v.contact.email }],
+        subject: 'Meeting invitation: ' + title + ' on ' + start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        content, mail_format: 'html'
+      }] } }));
+      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Leads', RecordID: v.contact.id, Title: C.inviteNote, Content: 'Emailed from ' + from + ' to ' + v.contact.email + ' for the meeting on ' + start.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.' }));
     },
     move: (v, m, start) => update(M.meeting, { id: m.id, [F.meeting.start]: stamp(start), [F.meeting.end]: stamp(new Date(start.getTime() + 1800000)), [v.isLead ? C.lead.reschedules : F.meeting.reschedules]: m.reschedules + 1 }),
     outcome: (v, m, f) => update(M.meeting, only({ id: m.id, [v.isLead ? C.lead.outcome : F.meeting.outcome]: f.outcome, [v.isLead ? C.lead.reason : F.meeting.reason]: f.outcome === 'Rejected' ? f.reason : null })),

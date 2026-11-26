@@ -38,7 +38,7 @@
     tick: '<path d="m6 12.5 4 4 8-9"/>'
   };
   const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${shapes[n]}</svg>`;
-  const icons = { 'Temperature': 'heat', 'Account engagement': 'people', 'Next task': 'check', 'Meeting status': 'calendar', 'Touch timeline': 'clock', 'Activity': 'clock', 'Lead details': 'card', 'Notes': 'note', 'Tasks': 'check', 'Linked deals': 'deal', 'Lead owner': 'people' };
+  const icons = { 'Temperature': 'heat', 'Account engagement': 'people', 'Next task': 'check', 'Meeting status': 'calendar', 'Touch timeline': 'clock', 'Activity': 'clock', 'Lead details': 'card', 'Notes': 'note', 'Tasks': 'check', 'Linked deals': 'deal', 'Lead owner': 'people', 'Email opt out': 'mailOff' };
   const initials = n => { const w = String(n).replace(/\(.*?\)/g, '').trim().split(/\s+/); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
   const block = (title, body, cls) => `<section class="${cls || ''}" data-card="${title.toLowerCase().replace(/\s+/g, '-')}"><h2>${icon(icons[title])}${title}</h2>${body}</section>`;
 
@@ -287,16 +287,23 @@
     add('raise', 'data-do="raise"', icon('deal') + 'Convert to Deal', !ok, 'primary');
     if (V.live) b.push(`<button class="icon-only" title="Open in CRM" data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}<span class="sr">Open in CRM</span></button>`);
     if (ui.junk) b.push(ui.junk); // Mark as junk sits on the same line as the other buttons
-    const endAt = b.length; // Email opt out goes on its own line below
-    add('optOut', 'data-show="optout"', icon('mailOff') + 'Email opt out', out, 'quiet');
+    // Email opt out is not here: it has its own card at the very bottom of the page (optOutBlock)
     const notes = [];
     if (out) notes.push('Email opted out: no emails or email notifications. Call tasks and meeting booking are also blocked. The phone number and details stay saved in CRM.');
     if (R.can(V.user, 'raise') && !ok) notes.push(V.live && !V.isLead || !C.acceptOnInvite ? 'Convert to Deal unlocks after an Accepted meeting.' : !m || state === 'done' ? 'Convert to Deal unlocks after you book a meeting and send the invitation.' : m.reply === 'declined' ? 'The client declined the invitation. Book a later meeting and send its invitation to unlock Convert to Deal.' : 'Click Send email to send the meeting invitation. Convert to Deal then unlocks.');
     if (V.live && V.user.role === 'View only') notes.push(`The CRM profile "${esc(V.user.profile || 'unknown')}" is not matched to a Befree role in config.js.`);
     if (V.service && V.service.notFound && V.service.notFound.length && V.user.role === 'Admin') notes.push('These API names in config.js are not in your Leads module: ' + esc(V.service.notFound.join(', ')) + '.');
-    const end = b.splice(endAt);
-    const lineBreak = b.length && end.length ? '<span class="row-break" aria-hidden="true"></span>' : '';
-    return `<div class="actions">${b.join('') || (end.length ? '' : '<span class="mute">View only</span>')}${lineBreak}${end.join('')}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
+    return `<div class="actions">${b.join('') || '<span class="mute">View only</span>'}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
+  }
+  // Email opt out: the last card on the page. Its confirmation opens inside the card, so it stays in view.
+  function optOutBlock() {
+    if (!R.can(V.user, 'optOut')) return '';
+    const keep = 'Their phone number and details stay saved in CRM.';
+    if (R.isOptedOut(V.contact)) return block('Email opt out', `<p>${pill('Email opted out', 'bad')}</p><p class="mute">${esc(V.contact.name)} gets no emails or email notifications. ${keep}</p>`, 'optout-card');
+    const body = ui.form === 'optout'
+      ? `<p><b>Email opt out ${esc(V.contact.name)}?</b></p><p>They will get no more emails or email notifications. Call tasks and meeting booking will also be blocked. ${keep}</p><div class="row"><button class="primary" data-do="optout" ${ui.busy ? 'disabled' : ''}>Yes, opt out of email</button><button data-do="cancel">Cancel</button></div>`
+      : `<p class="mute">Use this when the customer does not want emails or email notifications. ${keep}</p><button class="quiet" data-show="optout" ${ui.busy ? 'disabled' : ''}>${icon('mailOff')}Email opt out</button>`;
+    return block('Email opt out', body, 'optout-card');
   }
   // AI summary. Drawn in its own box, so typing elsewhere on the page is not lost.
   function drawAi() {
@@ -479,7 +486,6 @@
       const m = R.latestMeeting(V);
       return `<div class="panel"><p><b>Send the meeting invitation${m.invited ? ' again' : ''}?</b></p><p>To ${esc(V.contact.name)} (${esc(V.contact.email)}), for the meeting on ${time(m.start)}.</p><p class="mute">CRM emails the client an invitation and adds them to the meeting.</p><button class="primary" data-do="invite">Send invitation</button> <button data-do="cancel">Cancel</button></div>`;
     }
-    if (ui.form === 'optout') return `<div class="panel"><p><b>Email opt out ${esc(V.contact.name)}?</b></p><p>They will get no more emails or email notifications. Call tasks and meeting booking will also be blocked. Their phone number and details stay saved in CRM.</p><button class="primary" data-do="optout">Yes, opt out of email</button> <button data-do="cancel">Cancel</button></div>`;
     if (ui.form === 'book' || ui.form === 'resched') return `<form class="panel" data-form="${ui.form}"><label>${ui.form === 'book' ? 'Meeting' : 'New meeting'} date and time<input type="datetime-local" name="start" required></label><button class="primary">${ui.form === 'book' ? 'Book meeting' : 'Reschedule'}</button> <button type="button" data-do="cancel">Cancel</button></form>`;
     return '';
   }
@@ -490,7 +496,7 @@
     $('#app').classList.toggle('fresh', ui.shown !== ui.id);
     $('#app').innerHTML = '<div class="hero' + (ui.shown === ui.id ? '' : ' enter') + '">' + header() + journey() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats"><div id="heat">' + temperatureBlock(t) + '</div>' + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
-      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + ownerBlock() + '</div></div>';
+      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + ownerBlock() + optOutBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + '</div></div>';
     ui.shown = ui.id;
     drawDup();
     drawAi();
@@ -596,7 +602,13 @@
     if (x.tab) { keep(); ui.tab = x.tab; return render(); }
     if (x.close) return run(() => db.closeTask(V, x.close), 'Task completed.');
     if (x.record) return db.open(x.entity, x.record);
-    if (x.show) { ui.form = x.show; return say(null); }
+    if (x.show) {
+      ui.form = x.show;
+      say(null);
+      const card = x.show === 'optout' && document.querySelector('[data-card="email-opt-out"]');
+      if (card) card.scrollIntoView({ block: 'nearest' }); // the confirmation is at the bottom of the page
+      return;
+    }
     switch (x.do) {
       case 'cancel': ui.form = null; return say(null);
       case 'edit':

@@ -27,7 +27,6 @@
     // false: only the meeting outcome Accepted does (Befree rule R4).
     acceptOnInvite: true,
     inviteNote: 'Meeting invitation sent', // title of the note kept on the lead
-    inviteChecks: [500, 1000, 2000, 3000, 4000], // waits in ms before each check that CRM has sent it
     // functionName: CRM function that converts the lead (see crm_functions/lead_convert_to_deal.dg)
     convert: { functionName: 'lead_convert_to_deal' },
     // Duplicate alert: these email domains do not identify a company
