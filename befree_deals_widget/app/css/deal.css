@@ -551,9 +551,17 @@ button.primary:hover:not(:disabled) { background: #0b5550; border-color: #0b5550
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
 
+<<<<<<< HEAD
 /* ---------- Deal owner, at the bottom of the page ---------- */
 .owner-foot { display: flex; align-items: center; gap: 12px; margin-top: 24px; padding: 14px 20px; background: var(--card); border: 1px solid var(--rule-dark); border-radius: var(--r); box-shadow: var(--lift); }
 .owner-foot .face { --h: 228; flex: none; }
 .owner-foot > span:last-child { display: grid; gap: 2px; min-width: 0; }
 .owner-foot small { color: var(--mute); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .owner-foot b { font-family: var(--head); overflow-wrap: anywhere; }
+=======
+/* ---------- Bigger company name; two items left in the header strip ---------- */
+h1 { font-size: 40px; line-height: 1.12; }
+.strip { grid-template-columns: minmax(0, 1fr) minmax(130px, auto); }
+.strip > div:nth-child(2) { grid-column: auto; grid-row: auto; border-left: 1px solid var(--rule); border-top: 0; }
+@media (max-width: 720px) { h1 { font-size: 30px; } }
+>>>>>>> a152043ac7fae9d7ed13ea1eff79047b6373a8f3

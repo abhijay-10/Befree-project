@@ -698,6 +698,7 @@ window.Data = (function () {
       marketingKpis: marketingKpis,
       revenueForecast: revenueForecast(deals, state.range),
       salesByOwner: salesByOwner(deals, from),
+      channelLeads: raws.every(function (r) { return r.channelLeads; }) ? raws.reduce(function (all, r) { return all.concat(r.channelLeads); }, []) : null,
       mkt: (function () {
         const t = function (key, list) { return list.reduce(function (n, r) { return n + (r[key] || 0); }, 0); };
         const now = raws.map(function (r) { return r.mkt; }), prev = raws.every(function (r) { return r.mktBefore; }) ? raws.map(function (r) { return r.mktBefore; }) : null;
@@ -1293,6 +1294,11 @@ window.Data = (function () {
       services: services,
       leadStats: leadStats,
       mkt: marketingOf(deals, leads, since),
+      // Read by the Channel Contribution chart: each lead's created date and channel (null: no Lead Source)
+      channelLeads: leads && leads.map(function (l) {
+        const raw = l.Lead_Source && l.Lead_Source !== "-None-" ? l.Lead_Source : null;
+        return { created: toDate(l[Ld.created]), source: sourceOf(l) || raw };
+      }),
       mktBefore: since ? marketingOf(deals, leads, before, since) : null,
       win: winOf(last6),
       newAccounts: accounts ? newAccounts : null,

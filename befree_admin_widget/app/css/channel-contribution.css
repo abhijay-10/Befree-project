@@ -1,0 +1,47 @@
+/* Channel Contribution trend card (Admin Overview). Uses the admin's own variables; every class starts with cc-. */
+.cc-card { border-radius: 16px; }
+.cc-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.cc-title { position: relative; display: flex; align-items: center; gap: 8px; }
+.cc-menu { width: 28px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--muted); line-height: 1; cursor: pointer; }
+.cc-pop { position: absolute; z-index: 4; top: 100%; right: 0; margin-top: 6px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 12px 28px -14px rgba(20, 30, 80, .35); }
+.cc-pop[hidden] { display: none; }
+.cc-pop button { padding: 7px 12px; border: 0; border-radius: 7px; background: none; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.cc-pop button:hover { background: #f3f5fb; }
+.cc-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.cc-pills { position: relative; display: grid; grid-template-columns: repeat(var(--n), 1fr); padding: 3px; border-radius: 10px; background: #eef0f6; isolation: isolate; }
+.cc-pills button { padding: 5px 14px; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.cc-pills button[aria-pressed="true"] { color: #111827; }
+.cc-slide { position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--n)); border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(17, 24, 39, .18); transform: translateX(calc(var(--at) * 100%)); transition: transform .25s cubic-bezier(.2, .7, .3, 1); }
+.cc-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.cc-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; background: #fff; font: inherit; font-size: 12.5px; cursor: pointer; transition: opacity .2s; }
+.cc-chip i { width: 10px; height: 10px; border: 3px solid; border-radius: 50%; box-sizing: border-box; }
+.cc-chip[aria-pressed="false"] { opacity: .4; }
+.cc-caption { margin: 12px 0 4px; color: var(--muted); font-size: 12px; text-align: right; }
+.cc-plot { position: relative; min-height: 220px; }
+.cc-svg { display: block; overflow: visible; }
+.cc-grid { stroke: #eef0f5; stroke-width: 1; }
+.cc-axis { fill: var(--muted); font: 11px ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.cc-line { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; transition: opacity .25s; }
+.cc-line.is-other { stroke-width: 2; }
+.cc-line.is-hidden { opacity: 0; }
+.cc-line.is-drawing { stroke-dasharray: 1; animation: cc-draw .9s ease-out backwards; }
+@keyframes cc-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.cc-guide { stroke: #b9c0d4; stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; transition: opacity .12s; pointer-events: none; }
+.cc-dot { fill: #fff; stroke-width: 2.25; opacity: 0; transition: opacity .12s; pointer-events: none; }
+.cc-tip { position: absolute; z-index: 3; top: 8px; width: 190px; padding: 9px 12px; border-radius: 10px; background: #111827; color: #fff; font-size: 12px; opacity: 0; transition: opacity .12s; pointer-events: none; }
+.cc-tip b { display: block; margin-bottom: 4px; font-weight: 600; }
+.cc-tip div { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 2px 0; }
+.cc-tip i { width: 8px; height: 8px; border-radius: 50%; }
+.cc-tip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-tip strong { font-variant-numeric: tabular-nums; }
+.cc-plot.is-hover .cc-guide, .cc-plot.is-hover .cc-dot, .cc-plot.is-hover .cc-tip { opacity: 1; }
+.cc-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.cc-note:empty { display: none; }
+.cc-empty { display: grid; place-content: center; min-height: 220px; text-align: center; color: var(--muted); }
+.cc-empty b { color: #111827; margin-bottom: 4px; }
+.panel[aria-busy="true"] .cc-card .card-body { opacity: .45; animation: cc-pulse 1s ease-in-out infinite alternate; }
+@keyframes cc-pulse { to { opacity: .2; } }
+@media (max-width: 560px) { .cc-controls { margin-left: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-slide, .cc-chip, .cc-line, .cc-guide, .cc-dot, .cc-tip, .panel[aria-busy="true"] .cc-card .card-body { animation: none !important; transition: none !important; }
+}

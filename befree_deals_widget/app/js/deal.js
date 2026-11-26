@@ -182,6 +182,10 @@
     if (R.isLost(d.stage)) rows.unshift(['Reason for loss', d.lostReason || 'Not recorded']);
     return block('Deal details', 'card', serviceForm() + '<dl class="details">' + rows.filter(r => r[1]).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('') + '</dl>');
   }
+  function ownerBlock() {
+    const name = V.deal.owner || 'Unassigned';
+    return block('Deal owner', 'card', `<ul class="people"><li><span class="face" style="--h:${hue(name)}" aria-hidden="true">${esc(initials(name))}</span><span><b>${esc(name)}</b><small>Owns this deal in CRM</small></span></li></ul>`);
+  }
   function peopleBlock() {
     const d = V.deal;
     if (!d.roles) return block('Contact roles', 'card', `<p class="mute">Contact roles are not available. ${esc(V.problems.roles || '')}</p>`);
@@ -216,8 +220,12 @@
     $('#app').classList.toggle('fresh', ui.shown !== ui.id);
     $('#app').innerHTML = `<div class="hero ${ui.shown === ui.id ? '' : 'enter'}">` + header() + stageBar() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div class="stats">' + closeBlock() + approvalBlock() + amountBlock() + '</div>' +
+<<<<<<< HEAD
       '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + '</div></div>' +
       ownerFooter();
+=======
+      '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + ownerBlock() + '</div></div>';
+>>>>>>> a152043ac7fae9d7ed13ea1eff79047b6373a8f3
     ui.shown = ui.id;
   }
   function rail() {
