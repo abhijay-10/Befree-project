@@ -581,7 +581,6 @@ h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
 
-<<<<<<< HEAD
 /* ---------- Action row: every button on one line ----------
    Slightly tighter buttons so the whole row (including Mark as junk and Opt out) fits on one line.
    When the card is too narrow for that, Mark as junk and Opt out move to their own line, starting
@@ -595,8 +594,7 @@ h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
   .actions { flex-wrap: wrap; row-gap: 10px; }
   .end-group { flex-basis: 100%; margin-left: 0; }
 }
-=======
+
 /* ---------- Bigger company name ---------- */
 h1 { font-size: 40px; line-height: 1.12; }
 @media (max-width: 720px) { h1 { font-size: 30px; } }
->>>>>>> a152043ac7fae9d7ed13ea1eff79047b6373a8f3
