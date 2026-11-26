@@ -1,40 +1,60 @@
 string standalone.lead_convert_to_deal(String lead_id, String details)
 {
-	// Called by the Convert to deal button in the Leads widget.
-	// details is JSON: deal_name, stage, closing_date, amount, account_id, contact_id
+	// Called by the Convert to deal button in the Leads widget. Uses Zoho's own lead conversion,
+	// so the Account, Contact and Deal are created in the normal CRM modules.
+	// details is JSON: create_deal, deal_name, stage, closing_date, amount, campaign_id, contact_role, owner_id, account_id, contact_id
 	// An empty account_id or contact_id means CRM creates a new record.
 	result = Map();
 	result.put("ok",false);
+	converted = false;
 	try
 	{
 		id_text = ifnull(lead_id,"").toString().trim();
+		request_map = ifnull(details,"{}").toString().toMap();
+		// A request without create_deal comes from the first version of the widget, which always made a deal
+		create_deal = ifnull(request_map.get("create_deal"),"true").toString() == "true";
+		deal_name = ifnull(request_map.get("deal_name"),"").toString().trim();
+		stage = ifnull(request_map.get("stage"),"").toString().trim();
+		closing_date = ifnull(request_map.get("closing_date"),"").toString().trim();
+		contact_role = ifnull(request_map.get("contact_role"),"").toString().trim();
 		if(!id_text.matches("[0-9]+"))
 		{
 			result.put("error","The function did not receive a lead id. Check that its argument is named lead_id.");
 			return result.toString();
 		}
-		request_map = ifnull(details,"{}").toString().toMap();
-		deal_name = ifnull(request_map.get("deal_name"),"").toString().trim();
-		stage = ifnull(request_map.get("stage"),"").toString().trim();
-		closing_date = ifnull(request_map.get("closing_date"),"").toString().trim();
-		if(deal_name == "" || stage == "" || closing_date == "")
+		if(create_deal && (deal_name == "" || stage == "" || closing_date == ""))
 		{
 			result.put("error","Deal name, stage and closing date are required. Check that the second argument is named details.");
 			return result.toString();
 		}
-		deal = Map();
-		deal.put("Deal_Name",deal_name);
-		deal.put("Stage",stage);
-		deal.put("Closing_Date",closing_date);
-		amount = ifnull(request_map.get("amount"),"").toString().trim();
-		if(amount != "")
-		{
-			deal.put("Amount",amount.toDecimal());
-		}
+		// Read before converting: the lead leaves the Leads list afterwards
+		lead = zoho.crm.getRecordById("Leads",id_text.toLong());
+		services = lead.get("Services_List");
 		values = Map();
-		values.put("Deals",deal);
 		// Never replace the details of an existing account or contact with the lead's details
 		values.put("overwrite",false);
+		if(create_deal)
+		{
+			deal = Map();
+			deal.put("Deal_Name",deal_name);
+			deal.put("Stage",stage);
+			deal.put("Closing_Date",closing_date);
+			amount = ifnull(request_map.get("amount"),"").toString().trim();
+			if(amount != "")
+			{
+				deal.put("Amount",amount.toDecimal());
+			}
+			campaign_id = ifnull(request_map.get("campaign_id"),"").toString().trim();
+			if(campaign_id != "")
+			{
+				deal.put("Campaign_Source",campaign_id);
+			}
+			if(contact_role != "")
+			{
+				deal.put("Contact_Role",contact_role);
+			}
+			values.put("Deals",deal);
+		}
 		account_id = ifnull(request_map.get("account_id"),"").toString().trim();
 		if(account_id != "")
 		{
@@ -45,26 +65,111 @@ string standalone.lead_convert_to_deal(String lead_id, String details)
 		{
 			values.put("Contacts",contact_id);
 		}
+		owner_id = ifnull(request_map.get("owner_id"),"").toString().trim();
+		if(owner_id != "")
+		{
+			values.put("assign_to",owner_id);
+		}
+		// ---------- CONVERT ----------
 		response = zoho.crm.convertLead(id_text.toLong(),values);
 		info response;
-		new_deal = ifnull(response.get("Deals"),"").toString();
-		new_account = ifnull(response.get("Accounts"),"").toString();
-		new_contact = ifnull(response.get("Contacts"),"").toString();
+		new_ids = Map();
+		parts = {"Deals","Accounts","Contacts"};
+		for each  part in parts
+		{
+			new_id = ifnull(response.get(part),"").toString();
+			if(new_id.startsWith("{"))
+			{
+				new_id = ifnull(new_id.toMap().get("id"),"").toString();
+			}
+			if(!new_id.matches("[0-9]+"))
+			{
+				new_id = "";
+			}
+			new_ids.put(part,new_id);
+		}
+		new_deal = new_ids.get("Deals");
+		new_account = new_ids.get("Accounts");
+		new_contact = new_ids.get("Contacts");
 		if(new_deal == "" && new_account == "" && new_contact == "")
 		{
 			result.put("error","CRM did not convert the lead: " + ifnull(response.get("message"),response.toString()));
 			return result.toString();
 		}
+		converted = true;
 		result.put("ok",true);
 		result.put("deal_id",new_deal);
 		result.put("account_id",new_account);
 		result.put("contact_id",new_contact);
+		result.put("role_set",true);
+		if(contact_role != "" && new_deal != "")
+		{
+			// Until it is confirmed below
+			result.put("role_set",false);
+		}
+		// ---------- AFTER CONVERTING: nothing below can undo the conversion ----------
+		if(new_deal != "" && contact_role != "" && new_contact != "")
+		{
+			try
+			{
+				attempts = {1,2};
+				for each  attempt in attempts
+				{
+					if(result.get("role_set") == false)
+					{
+						role_rows = zoho.crm.getRelatedRecords("Contact_Roles","Deals",new_deal.toLong());
+						for each  role_row in role_rows
+						{
+							if(role_row.get("id").toString() == new_contact && ifnull(role_row.get("Contact_Role"),"").toString().contains(contact_role))
+							{
+								result.put("role_set",true);
+							}
+						}
+						if(result.get("role_set") == false && attempt == 1)
+						{
+							role_map = Map();
+							role_map.put("Contact_Role",contact_role);
+							info zoho.crm.updateRelatedRecord("Contact_Roles",new_contact.toLong(),"Deals",new_deal.toLong(),role_map);
+						}
+					}
+				}
+			}
+			catch (e1)
+			{
+				info "The contact role could not be confirmed: " + e1;
+			}
+		}
+		// The services chosen on the lead, if the field mapping did not bring them over
+		if(new_deal != "")
+		{
+			try
+			{
+				if(services != null && services.toString() != "" && services.toString() != "[]")
+				{
+					made = zoho.crm.getRecordById("Deals",new_deal.toLong());
+					made_services = ifnull(made.get("Services_List"),"").toString();
+					if(made_services == "" || made_services == "[]")
+					{
+						service_map = Map();
+						service_map.put("Services_List",services);
+						info zoho.crm.updateRecord("Deals",new_deal.toLong(),service_map);
+					}
+				}
+			}
+			catch (e2)
+			{
+				info "The services could not be copied: " + e2;
+			}
+		}
 	}
 	catch (e)
 	{
 		info "lead_convert_to_deal failed: " + e;
-		result.put("ok",false);
-		result.put("error","The convert function failed. Open the function log in CRM, and check whether the lead was converted.");
+		if(converted == false)
+		{
+			result.put("ok",false);
+			result.put("error","The convert function failed. Open the function log in CRM, and check whether the lead was converted.");
+		}
 	}
 	return result.toString();
 }

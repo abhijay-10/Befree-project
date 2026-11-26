@@ -136,10 +136,39 @@ test('convert to deal reuses the contact and its account first', () => {
 });
 test('convert to deal checks the form', () => {
   const choices = { contacts: [{ id: 'p1', name: 'Jo', accountId: 'a1' }] };
-  const f = { dealName: 'Acme', stage: 'Qualified', closingDate: '2026-12-24', amount: '', accountId: 'a1', contactId: 'p1' };
+  const f = { createDeal: 'on', dealName: 'Acme', stage: 'Qualified', closingDate: '2026-12-24', amount: '', accountId: 'a1', contactId: 'p1' };
   assert.equal(R.checkConvert(f, choices), null);
   for (const bad of [{ dealName: ' ' }, { stage: '' }, { closingDate: '' }, { amount: '-1' }, { accountId: '' }]) assert.ok(R.checkConvert({ ...f, ...bad }, choices), JSON.stringify(bad));
+  assert.equal(R.checkConvert({ accountId: 'a1', contactId: 'p1' }, choices), null); // no deal: only account and contact
+  assert.ok(R.checkConvert({ accountId: '', contactId: 'p1' }, choices));
 });
 test('only Admin, BDM and BDE can convert', () => {
   assert.deepEqual(['Admin', 'BDM', 'BDE', 'Marketing', 'View only'].map(role => R.can({ role }, 'convert')), [true, true, true, false, false]);
+});
+test('a sent invitation unlocks Convert to Deal, a declined one or another outcome does not', () => {
+  const ok = (m, more) => R.meetingAccepted(view({ meetings: [{ start: ago(-1), ...m }].concat(more || []) }));
+  assert.ok(ok({ invited: true }) && ok({ invited: true, reply: 'accepted' }) && ok({ invited: true, reply: 'not_known' }) && ok({ outcome: 'Accepted' }));
+  assert.ok(!ok({}) && !ok({ invited: true, reply: 'declined' }) && !ok({ invited: true, outcome: 'Rejected' }) && !ok({ invited: true, outcome: 'No-show' }));
+  assert.ok(!R.meetingAccepted(view({})));
+  assert.ok(!ok({}, [{ start: ago(5), invited: true }])); // only the latest meeting's invitation counts
+  assert.ok(!R.canRaiseDeal(view({ meetings: [{ start: ago(-1), invited: true }] }))); // not proof of interest for the AI summary
+  C.acceptOnInvite = false;
+  assert.ok(!ok({ invited: true }) && ok({ outcome: 'Accepted' }));
+  C.acceptOnInvite = true;
+});
+test('temperature saved by the AI summary', () => {
+  const t = R.savedTemperature, d = { value: 'Hot', score: 80, judged: 60, good: ['a', 'b', 'c', 'd', 5], bad: null, sources: [{ url: 'https://a.com' }, { url: 'javascript:x' }, null] };
+  const x = t('Hot', d, false, 'Contacted');
+  assert.deepEqual([x.value, x.details.good, x.details.bad, x.details.sources], ['Hot', ['a', 'b', 'c'], [], [{ url: 'https://a.com' }]]);
+  assert.equal(t('Cold', d, false, '').details, null); // changed in CRM: the old reasons do not belong to it
+  assert.equal(t('', d, false, '').value, 'Hot');
+  assert.deepEqual([t('', null, false, '').value, t('-None-', null).value, t('Boiling', { value: 'x' }).value], ['', '', '']);
+  for (const [o, s] of [[true, ''], [false, 'Junk Lead'], [false, 'Lost Lead'], [false, 'Not Qualified']]) assert.equal(t('Hot', d, o, s).value, 'Cold');
+  assert.equal(t('', null, true, '').value, '');
+});
+test('temperature counts: each open lead once, lost and junk left out, opted-out never Hot', () => {
+  const l = (temperature, o) => ({ temperature, status: 'Contacted', optedOut: false, ...o });
+  assert.deepEqual(R.countTemperatures([l('Hot'), l('Hot'), l('Warm'), l('Cold'), l('Not enough data'), l(''), l('Hot', { optedOut: true }), l('Hot', { status: 'Junk Lead' })]),
+    { Hot: 2, Warm: 1, Cold: 2, 'Not enough data': 1, none: 1, total: 7 });
+  assert.equal(R.countTemperatures([]).total, 0);
 });

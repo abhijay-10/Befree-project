@@ -137,6 +137,14 @@
     return found;
   }
 
+  // The amount of each chosen service, and the deal amount as their total.
+  // Until a service has an amount, the Amount of the deal is used.
+  function amounts(d) {
+    const found = s => { const k = Object.keys(d.serviceAmounts || {}).find(x => norm(x) === norm(s)), v = k === undefined ? null : d.serviceAmounts[k]; return filled(v) && Number.isFinite(Number(v)) ? Number(v) : null; };
+    const list = d.services.map(name => ({ name, amount: found(name) })), set = list.filter(x => x.amount !== null);
+    const sum = Math.round(set.reduce((n, x) => n + x.amount, 0) * 100) / 100, used = sum > 0;
+    return { list, used, set: set.length, total: used ? sum : d.amount, expected: used && d.prob !== null ? sum * d.prob / 100 : used ? null : d.expected };
+  }
   // From Negotiation (90%) on, the services are fixed
   const servicesLocked = d => (d.prob !== null && d.prob >= C.lockServicesAt) || isWon(d.stage);
 
@@ -154,7 +162,7 @@
   const R = {
     toDate, day, daysBetween, addBusinessDays, businessDaysSince, addMonths, norm, befreeStage, isLost, isWon, isClosed, path, lostStages,
     missingStages, nextStage, gate, needsApproval, acceptance, nextStepAlert, pushes, needsReview, checkMove, sameStage, nextStepMove, checkLost, influence,
-    requestedServices, servicesLocked, can, canSee
+    requestedServices, amounts, servicesLocked, can, canSee
   };
   if (typeof module !== 'undefined') module.exports = R; else root.BefreeRules = R;
 })(this);

@@ -43,7 +43,7 @@
     const s = by(D.service);
     return {
       read: true, stageIds: idNames(by(D.stage)), stages: values(by(D.stage)), reasons: values(by(D.lostReason)),
-      notFound: Object.values(D).concat(Object.entries(X).filter(([k, n]) => n && !k.startsWith('touch')).map(e => e[1])).filter(n => !by(n)),
+      notFound: Object.values(D).concat(Object.values(C.serviceAmounts), Object.entries(X).filter(([k, n]) => n && !k.startsWith('touch')).map(e => e[1])).filter(n => !by(n)),
       service: s ? {
         field: s.api_name, label: s.field_label || 'Service', multi: s.data_type === 'multiselectpicklist',
         editable: s.data_type === 'picklist' || s.data_type === 'multiselectpicklist', options: values(s)
@@ -128,7 +128,7 @@
           contactId: id(r[D.contact]), contactName: name(r[D.contact]), owner: name(r[D.owner]), ownerId, createdBy: name(r[D.createdBy]), createdById,
           stage, prob, amount: r[D.amount], expected: r[D.expected], symbol: typeof r.$currency_symbol === 'string' ? r.$currency_symbol : '',
           created: r.Created_Time, modified: r.Modified_Time, closeDate: r[D.closeDate] || null, timeline: r[C.timeline] || null, nextStep: r[D.nextStep] || '',
-          nextStepUpdated: X.nextStepUpdated ? r[X.nextStepUpdated] : null, services: many(r[D.service]), lostReason: r[D.lostReason] || '',
+          nextStepUpdated: X.nextStepUpdated ? r[X.nextStepUpdated] : null, services: many(r[D.service]), serviceAmounts: Object.fromEntries(Object.entries(C.serviceAmounts).map(([s, f]) => [s, r[f]])), lostReason: r[D.lostReason] || '',
           type: r[D.type], leadSource: r[D.leadSource], campaign: name(r[D.campaign]), description: r[D.description],
           sourcedBy: X.sourcedBy ? r[X.sourcedBy] || '' : '', approval: X.approval ? r[X.approval] || '' : '', acceptance: X.acceptance ? r[X.acceptance] || '' : '', rejectReason: X.rejectReason ? r[X.rejectReason] || '' : '',
           roles: await readRoles(roles),

@@ -19,7 +19,7 @@
     return {
       id, name, country, accountId: 'acc-' + id, accountName: account, accountOwner: user(owner).name, contactId: 'con-' + id, contactName: contact,
       owner: user(owner).name, ownerId: owner, createdById: raisedBy, createdBy: user(raisedBy).name, stage, prob, amount, symbol: '',
-      created: ago(created), modified: ago(Math.min(1, created)), closeDate: ahead(close), services: [], roles: [], nextStep: '', nextStepUpdated: null,
+      created: ago(created), modified: ago(Math.min(1, created)), closeDate: ahead(close), services: [], serviceAmounts: {}, roles: [], nextStep: '', nextStepUpdated: null,
       type: 'New Business', leadSource: 'Web Download', campaign: '', description: '', sourcedBy: 'BDE', acceptance: 'Not needed', approval: 'Not needed', rejectReason: '', lostReason: '',
       history, touches: [], ...o
     };
@@ -32,7 +32,7 @@
     make('d2', 'Harbour payroll support', 'UK', 'Harbour Advisory', 'Megan Price', 'sam', 'tina', 'Qualified', 32000, 0, 45, { services: [PAY], roles: dm('Megan Price', 'Influencer'), nextStep: 'Scoping call', acceptance: 'Pending', sourcedBy: 'BDE', touches: [touch(4, 'Email click', 'Email', 'Megan Price')] }),
     make('d3', 'Lakeside bookkeeping', 'US', 'Lakeside Tax', 'Faye Morris', 'brad', 'brad', 'Agreement sent', 52000, 60, 20, { services: [BOOK], roles: dm('Faye Morris'), nextStep: 'Legal review call', closes: [5, 12, 20], sourcedBy: 'Marketing', campaign: 'Capacity webinar', touches: [touch(95, 'Webinar', 'Webinars', 'Faye Morris')] }),
     make('d4', 'Summit virtual admin', 'US', 'Summit Books', 'Ben Ortiz', 'brad', 'cooper', 'Needs confirmed', 18000, 20, 30, { services: [], roles: [], nextStep: 'Send case study', sourcedBy: 'Referral' }),
-    make('d5', 'Wattle accounting team', 'AU', 'Wattle Advisory', 'Ava Scott', 'ross', 'ross', 'Closed-won', 36000, 90, 5, { services: [ACC, TAX], roles: dm('Ava Scott'), nextStep: 'Handover', sourcedBy: 'BDM', touches: [touch(130, 'Webinar', 'Webinars', 'Ava Scott')] }),
+    make('d5', 'Wattle accounting team', 'AU', 'Wattle Advisory', 'Ava Scott', 'ross', 'ross', 'Closed-won', 36000, 90, 5, { services: [ACC, TAX], serviceAmounts: { [ACC]: 20000, [TAX]: 16000 }, roles: dm('Ava Scott'), nextStep: 'Handover', sourcedBy: 'BDM', touches: [touch(130, 'Webinar', 'Webinars', 'Ava Scott')] }),
     make('d6', 'Coral payroll pilot', 'AU', 'Coral Partners', 'Tom Nguyen', 'ross', 'rick', 'Closed-lost', 12000, 70, 3, { services: [PAY], roles: dm('Tom Nguyen'), nextStep: '', lostReason: 'Timing', sourcedBy: 'BDE' }),
     make('d7', 'Banksia tax season', 'AU', 'Banksia Group', 'Isla Grant', 'ross', 'ross', 'Qualified', 61000, 3, 150, { services: [TAX], roles: dm('Isla Grant'), nextStep: 'Manager approval', approval: 'Pending', sourcedBy: 'AI SDR' })
   ];

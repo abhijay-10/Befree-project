@@ -79,7 +79,7 @@ h1 { font-size: 25px; line-height: 1.2; font-weight: 650; margin: 0; overflow-wr
 .band dd .pill { background: none; padding: 0; font-size: 14px; font-weight: 600; }
 
 /* Journey */
-.journey { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding: 22px 14px 18px; border-bottom: 1px solid var(--line); }
+.journey { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 22px 14px 18px; border-bottom: 1px solid var(--line); }
 .journey li { position: relative; text-align: center; padding: 0 4px; }
 .journey li + li::before { content: ""; position: absolute; top: 14px; right: 50%; width: 100%; height: 2px; background: var(--line); }
 .journey li.done + li.done::before, .journey li.done + li.next::before { background: var(--accent); }
@@ -151,6 +151,15 @@ h2 svg { width: 32px; height: 32px; padding: 8px; border-radius: 9px; background
 .details dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
 
 /* Messages and labels */
+#heat { display: contents; }
+.heat-count { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e4e9f2; }
+.heat-count p { grid-column: 1 / -1; margin: 0; }
+.heat-count span { display: grid; padding: 6px 8px; border-radius: 8px; font-size: 12px; }
+.heat-count b { font-size: 18px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.heat-count .hot { background: var(--hot-bg); color: #8f2413; }
+.heat-count .warm { background: var(--warm-bg); color: #6b4600; }
+.heat-count .cold { background: var(--cold-bg); color: #1d4e80; }
+#heat .ai-list { gap: 6px; margin: 8px 0; padding: 0; list-style: none; font-size: 13px; }
 .pill { display: inline-block; border-radius: 5px; padding: 1px 8px; font-size: 12px; font-weight: 500; background: #e8ecf3; vertical-align: middle; }
 .pill.hot, .bad { background: var(--hot-bg); color: #8f2413; }
 .pill.warm { background: #fbe9bf; color: #6b4600; }
@@ -199,6 +208,8 @@ textarea { font: inherit; color: inherit; width: 100%; border: 1px solid #c9d1de
 .fields input { display: block; width: 100%; margin-top: 3px; }
 .panel .fields select { display: block; width: 100%; margin-top: 3px; }
 .row.end { margin-top: 8px; }
+.panel .tick { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
+.panel .tick input { display: inline-block; width: auto; margin: 0; }
 
 /* AI summary */
 button.ai { border-color: #b9c6f7; background: var(--tint); color: var(--accent-dark); font-weight: 600; }

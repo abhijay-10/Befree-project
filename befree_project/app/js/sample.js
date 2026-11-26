@@ -68,11 +68,13 @@
     },
     async duplicates(v) { return { email: v.contact.email, failed: [], contacts: [], leads: [], accounts: v.deals.length ? [{ id: v.account.id, name: v.account.name, by: 'same name' }] : [] }; },
     async dealStages() { return Object.keys(C.stages); },
+    async contactRoles() { return [{ id: 'r1', name: 'Developer/Evaluator' }, { id: 'r2', name: 'Decision Maker' }, { id: 'r3', name: 'Purchasing' }, { id: 'r4', name: 'Executive Sponsor' }]; },
+    async campaigns() { return []; },
     async convert(v, f) {
-      const deal = { id: 'd' + next++, accountId: v.account.id, name: f.dealName.trim(), stage: f.stage, raisedBy: v.user.name };
-      deals.push(deal);
+      const deal = f.createDeal ? { id: 'd' + next++, accountId: v.account.id, name: f.dealName.trim(), stage: f.stage, raisedBy: v.user.name } : null;
+      if (deal) deals.push(deal);
       Object.assign(find(v.contact.id), { converted: true, lifecycle: 'Opportunity' });
-      return { dealId: deal.id, accountId: v.account.id, contactId: v.contact.id };
+      return { dealId: deal ? deal.id : '', accountId: v.account.id, contactId: v.contact.id, roleSet: true };
     },
     async users() { return C.users.filter(u => u.role === 'BDM').map(u => ({ id: u.name, name: u.name })); },
     async setOwner(v, id) { accounts.find(a => a.id === v.account.id).owner = id; },
@@ -106,6 +108,7 @@
       meetings.push({ id: 'm' + next++, contactId: v.contact.id, start, bookedOn: new Date(), selfBooked: false, outcome: '', reason: '', reschedules });
       find(v.contact.id).lifecycle = 'Meeting booked';
     },
+    async invite(v, m) { Object.assign(meetings.find(x => x.id === m.id), { invited: true, invitedOn: new Date(), reply: 'not_known' }); },
     async move(v, m, start) { const x = meetings.find(y => y.id === m.id); x.start = start; x.reschedules++; },
     async outcome(v, m, f) { Object.assign(meetings.find(y => y.id === m.id), { outcome: f.outcome, reason: f.outcome === 'Rejected' ? f.reason : '' }); },
     async toCold(v, m) {

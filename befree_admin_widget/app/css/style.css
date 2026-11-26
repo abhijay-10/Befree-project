@@ -311,10 +311,17 @@ button { cursor: pointer; }
   font-weight: 700;
 }
 
-/* Pipeline by stage */
-.ov-stage-card .hbar { padding: 12px 0; }
-.ov-stage-card .hbar-track { background: var(--page-bg); }
-.ov-stage-card .hbar-value { min-width: 78px; }
+/* Unconfirmed deals by stage: the bar always fits its "N deals · ₹X" text */
+.ov-funnel-bar[data-check="bucket"] { min-width: max-content; padding-right: 12px; white-space: nowrap; }
+.ov-funnel-bar.is-empty { background: var(--page-bg); color: var(--muted); font-weight: 500; }
+.ov-stage-total { margin: 12px 0 0; font-size: 13px; font-weight: 600; }
+/* Won only / Won + Open switch cards */
+.opt-switch button { font-size: 12px; }
+.mk-kpi .opt-switch { align-self: flex-start; margin-top: 10px; }
+.mk-kpi-option { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.opt-split { margin: 4px 0 8px; color: var(--muted); font-size: 12px; }
+.rp-attr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 600; }
+.ov-kpi-note { margin-top: 4px; font-size: 11px; font-style: italic; }
 
 /* Won vs lost */
 .ov-toggle { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: var(--control-radius); }
@@ -423,6 +430,15 @@ button { cursor: pointer; }
 @media (max-width: 640px) {
   .mk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------- Tab 1: leads and countries ---------- */
+.ov-lead-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.ov-stat-sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.ov-chart-small { height: 170px; }
+.ov-table tbody tr.is-current td { background: var(--blue-pale); }
+.ov-table tbody tr.is-plain { cursor: default; }
+@media (max-width: 1280px) { .ov-lead-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ov-lead-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---------- Tab 1 breakpoints ---------- */
 @media (max-width: 1280px) {

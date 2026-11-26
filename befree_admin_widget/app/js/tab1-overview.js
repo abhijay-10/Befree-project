@@ -4,8 +4,8 @@
 
   const PAGE_SIZE = 6;
 
-  // Funnel colours, darkest to lightest.
-  const STAGE_COLORS = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2", "#B3C3F5"];
+  // Stage bucket colours, 10% to 90%.
+  const STAGE_COLORS = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2"];
   const GREY = "#DDE1E9"; // deselected chart segments
 
   // Constant SVG markup only (Lucide-style).
@@ -73,7 +73,7 @@
 
   function renderBanner(data, state) {
     const card = el("article", "card ov-banner");
-    const badge = el("div", "ov-badge", state.country);
+    const badge = el("div", "ov-badge", state.country === Data.OTHER_COUNTRY ? "—" : state.country);
 
     const text = el("div", "ov-banner-text");
     const title = el("h2", "ov-banner-title", state.country === "ALL" ? "All countries overview" : countryLabel(state) + " overview");
@@ -83,9 +83,11 @@
       team.bdm && "BDM " + team.bdm,
       team.bde && "BDE " + team.bde,
       plural(data.accounts, "account"),
-      plural(data.dealCount, "deal")
+      data.kpis.confirmedCount + " confirmed · " + data.kpis.unconfirmedCount + " unconfirmed " + (data.kpis.unconfirmedCount === 1 ? "deal" : "deals")
     ];
     text.append(title, el("p", "ov-muted", parts.filter(Boolean).join(" · ")));
+    if (data.reason) text.appendChild(el("p", "ov-muted", "Reason: " + data.reason));
+    if (data.problems && data.problems.length) text.appendChild(el("p", "ov-muted", "Could not be read from CRM: " + data.problems.join(", ")));
 
     const all = button("btn-outline");
     all.append(icon("globe"), "All countries");
@@ -95,16 +97,18 @@
     return card;
   }
 
-  function renderKpis(data) {
+  function renderKpis(data, state) {
     const k = data.kpis;
     const row = el("div", "ov-kpis");
     [
-      { key: "pipeline", icon: "wallet", tone: "blue", value: App.formatINR(k.pipelineValue), label: "Total pipeline value", sub: "Open deals, amounts in ₹" },
-      { key: "forecast", icon: "target", tone: "green", value: App.formatINR(k.forecast), label: "Weighted forecast", sub: "Value × stage probability", check: "forecast" },
-      { key: "openDeals", icon: "handshake", tone: "blue", value: App.formatCount(k.openDeals), label: "Open deals", sub: "Stages 10% to 90%" },
+      { key: "confirmed", icon: "wallet", tone: "blue", value: App.formatINR(k.confirmedAmount), label: "Confirmed amount",
+        sub: plural(k.confirmedCount, "Closed-won deal") + ", closing date in " + App.periodText(state.range) },
+      { key: "unconfirmed", icon: "target", tone: "green", value: App.formatINR(k.unconfirmedAmount), label: "Unconfirmed amount",
+        sub: "Open deals at 10% to 90%", note: "Estimate: " + App.formatINR(k.weighted) + " weighted (amount × stage %)" },
+      { key: "unconfirmedDeals", icon: "handshake", tone: "blue", value: App.formatCount(k.unconfirmedCount), label: "Unconfirmed deals", sub: "Open deals at 10% to 90%" },
       { key: "winRate", icon: "percent", tone: "orange", value: App.formatPct(k.winRate), label: "Win rate", sub: "Won ÷ closed, last 6 months" },
       { key: "newAccounts", icon: "building", tone: "blue", value: App.formatCount(k.newAccounts), label: "New accounts", sub: "Created in this period" },
-      { key: "influenced", icon: "megaphone", tone: "green", value: App.formatINR(k.influenced), label: "Marketing influenced", sub: "Contact engaged within 180 days", check: "influenced" }
+      { key: "influenced", icon: "megaphone", tone: "green", value: App.formatINR(k.influenced), label: "Marketing influenced", sub: "Confirmed deals, contact engaged within 180 days", check: "influenced" }
     ].forEach(function (item) {
       const card = el("article", "card ov-kpi");
       const delta = k.delta[item.key];
@@ -123,6 +127,7 @@
       const value = el("div", "ov-kpi-value", item.value);
       if (item.check) value.dataset.check = item.check;
       card.append(top, value, el("div", "ov-kpi-label", item.label), el("div", "ov-kpi-sub", item.sub));
+      if (item.note) card.appendChild(el("div", "ov-kpi-sub ov-kpi-note", item.note));
       const points = k.spark[item.key];
       if (points && points.length > 1) card.appendChild(App.sparkline(points, falling ? "var(--red)" : "var(--green)"));
       row.appendChild(card);
@@ -130,36 +135,150 @@
     return row;
   }
 
-  /* ================= Funnel and stages ================= */
+  /* ================= Leads ================= */
 
-  function renderFunnel(data, state) {
-    const card = App.card("Sales funnel", "Deals reaching each stage · " + countryLabel(state));
-    const max = Math.max.apply(null, data.funnel.concat(1));
-    Data.STAGES.forEach(function (stage, i) {
-      const row = el("div", "ov-funnel-row");
-      const label = el("span", "ov-funnel-label", stage.name + " ");
-      label.appendChild(el("span", "ov-muted", stage.prob + "%"));
-      const track = el("div");
-      const bar = el("div", "ov-funnel-bar", String(data.funnel[i]));
-      bar.style.width = (data.funnel[i] / max * 100) + "%";
-      bar.style.background = STAGE_COLORS[i];
-      track.appendChild(bar);
-      row.append(label, track);
-      card.body.appendChild(row);
+  // series = [{ key, name, color }]. Shared by the leads card.
+  function monthBars(months, series) {
+    const max = Math.max.apply(null, [1].concat(...months.map(function (m) {
+      return series.map(function (s) { return m[s.key]; });
+    })));
+    const plot = el("div", "ov-chart ov-chart-small");
+    months.forEach(function (m) {
+      const col = el("div", "ov-chart-col");
+      const bars = el("div", "ov-chart-bars");
+      series.forEach(function (s) {
+        const bar = el("div", "ov-chart-bar");
+        bar.style.height = (m[s.key] / max * 100) + "%";
+        bar.style.background = s.color;
+        bar.title = m.label + " · " + s.name + ": " + App.formatCount(m[s.key]);
+        bar.setAttribute("role", "img");
+        bar.setAttribute("aria-label", bar.title);
+        bars.appendChild(bar);
+      });
+      col.append(bars, el("div", "ov-chart-month", m.label));
+      plot.appendChild(col);
     });
+    return plot;
+  }
+
+  function stat(label, value, sub) {
+    const box = el("div", "nc-stat");
+    box.append(el("span", "", label), el("strong", "", value));
+    if (sub) box.appendChild(el("small", "ov-stat-sub", sub));
+    return box;
+  }
+
+  function renderLeads(data, state) {
+    const l = data.leads;
+    const card = App.card("Leads", "Created, open and moved to deals · " + countryLabel(state));
+    const period = App.periodText(state.range);
+    // Moved leads whose deal sits in another country (or no longer exists), so the counts can be reconciled.
+    const away = state.country === "ALL" ? l.movedMissing : (l.movedElsewhere || 0) + (l.movedMissing || 0);
+    const strip = el("div", "nc-stats ov-lead-stats");
+    strip.append(
+      stat("Total leads", App.formatCount(l.total), "All time" + (l.otherConverted ? " · " + l.otherConverted + " converted without a deal" : "")),
+      stat("Created", App.formatCount(l.created), "In " + period + (l.createdDelta ? " (" + l.createdDelta + ")" : "")),
+      stat("Open", App.formatCount(l.open), "Still being worked"),
+      stat("Moved to deals", App.formatCount(l.moved), l.movedPeriod === null ? "Not available" : App.formatCount(l.movedPeriod) + " in " + period +
+        (away ? " · " + away + (state.country === "ALL" ? " deal not found" : " deal not in " + countryLabel(state)) : "")),
+      stat("Lost or junk", App.formatCount(l.lost), "Status lost, junk or not qualified"),
+      stat("Moved rate", App.formatPct(l.rate), "Moved ÷ all leads")
+    );
+    const series = [
+      { key: "created", name: "Created", color: "var(--blue)" },
+      { key: "moved", name: "Moved to deals", color: "var(--green)" }
+    ];
+    card.body.append(strip, monthBars(l.months, series), App.legend(series.map(function (s) {
+      return { label: s.name, color: s.color };
+    }), "ov-legend"));
     return card;
   }
 
-  function renderStages(data) {
-    const card = App.card("Pipeline by stage", "Open value · weighted forecast " + App.formatINR(data.kpis.forecast));
-    card.classList.add("ov-stage-card");
-    const rows = Data.STAGES.filter(function (s) { return data.pipelineByStage[s.name] > 0; });
-    const max = Math.max.apply(null, rows.map(function (s) { return data.pipelineByStage[s.name]; }).concat(1));
-    rows.forEach(function (s) {
-      const value = data.pipelineByStage[s.name];
-      card.body.appendChild(App.horizontalBarRow(s.name, App.formatINR(value), value / max * 100, "var(--blue)"));
+  function renderLeadStatus(data, state) {
+    const card = App.card("Open leads by status", countryLabel(state));
+    const rows = data.leads.byStatus;
+    const max = Math.max.apply(null, rows.map(function (r) { return r.count; }).concat(1));
+    rows.forEach(function (r) {
+      card.body.appendChild(App.horizontalBarRow(r.label, App.formatCount(r.count), r.count / max * 100, "var(--blue)"));
     });
-    if (!rows.length) card.body.appendChild(el("p", "ov-muted", "No open deals."));
+    if (!rows.length) card.body.appendChild(el("p", "ov-muted", data.leads.open === null ? "Leads are not available." : "No open leads."));
+    return card;
+  }
+
+  function renderCountries(data, state) {
+    const card = App.card("Country comparison", "Leads and deals by country · confirmed: closing date in " + App.periodText(state.range) +
+      " · won and lost in the last 6 months");
+    const names = { US: "United States", UK: "United Kingdom", AU: "Australia", Other: "Country not set" };
+    const columns = ["Country", "Leads created", "Open leads", "Moved to deals", "Confirmed deals", "Confirmed amount", "Won", "Lost", "Win rate"];
+    const table = el("table", "ov-table");
+    const head = el("tr");
+    columns.forEach(function (c) {
+      const th = el("th", "", c);
+      th.scope = "col";
+      head.appendChild(th);
+    });
+    const thead = el("thead");
+    thead.appendChild(head);
+    const tbody = el("tbody");
+    (data.countries || []).forEach(function (c) {
+      const tr = el("tr", c.code === state.country ? "is-current" : "");
+      [c.code, App.formatCount(c.created), App.formatCount(c.open), App.formatCount(c.moved), App.formatCount(c.confirmedDeals),
+       App.formatINR(c.confirmedAmount), App.formatCount(c.won), App.formatCount(c.lost), App.formatPct(c.winRate)].forEach(function (v, i) {
+        const td = el("td", i ? "" : "ov-deal-name", i ? v : names[v] || v);
+        tr.appendChild(td);
+      });
+      if (c.code === "Other") tr.title = "No US, UK or AU country was found on these records. They are part of All countries.";
+      tr.tabIndex = 0;
+      const pick = function () { Store.setCountry(c.code); };
+      tr.addEventListener("click", pick);
+      tr.addEventListener("keydown", function (e) { if (e.key === "Enter") pick(); });
+      tbody.appendChild(tr);
+    });
+    if (!tbody.children.length) {
+      const td = el("td", "ov-empty", "No data.");
+      td.colSpan = columns.length;
+      const tr = el("tr", "is-plain");
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.append(thead, tbody);
+    const scroller = el("div", "ov-table-wrap");
+    scroller.appendChild(table);
+    card.body.appendChild(scroller);
+    return card;
+  }
+
+  /* ================= Unconfirmed deals by stage ================= */
+
+  // One row per stage bucket (10% to 90%) with deal count and amount; the total row equals the two KPIs.
+  function renderUnconfirmed(data, state) {
+    const card = App.card("Unconfirmed deals by stage", "Open deals today · " + countryLabel(state));
+    const b = data.byBucket;
+    const keys = Data.BUCKETS.concat(b.none && b.none.count ? ["none"] : []);
+    const max = Math.max.apply(null, keys.map(function (k) { return b[k].count; }).concat(1));
+    keys.forEach(function (k, i) {
+      const row = b[k];
+      // CRM stages in this bucket, plus any stage a deal uses; the Befree name if CRM has none.
+      const crm = Data.STAGES.filter(function (s) { return k !== "none" && s.prob === k; }).map(function (s) { return s.name; });
+      const all = unique(crm.concat(row.stages));
+      const names = all.length ? all.join(", ") : k === "none" ? "" : Data.BUCKET_NAMES[k];
+      const label = el("span", "ov-funnel-label", k === "none" ? "Not mapped " : k + "% ");
+      label.appendChild(el("span", "ov-muted", names));
+      const track = el("div");
+      const bar = el("div", "ov-funnel-bar", plural(row.count, "deal") + " · " + App.formatINR(row.amount));
+      bar.style.width = (row.count / max * 100) + "%";
+      if (!row.count) bar.classList.add("is-empty");
+      else bar.style.background = k === "none" ? "#8D9FC9" : STAGE_COLORS[i];
+      bar.dataset.check = "bucket";
+      bar.dataset.count = row.count;
+      bar.dataset.amount = row.amount;
+      track.appendChild(bar);
+      const line = el("div", "ov-funnel-row");
+      line.append(label, track);
+      card.body.appendChild(line);
+    });
+    card.body.appendChild(el("p", "ov-stage-total", "Total: " + plural(data.kpis.unconfirmedCount, "deal") + " · " +
+      App.formatINR(data.kpis.unconfirmedAmount) + " · estimate " + App.formatINR(data.kpis.weighted) + " weighted"));
     return card;
   }
 
@@ -182,13 +301,13 @@
     const ranked = rows.map(function (r, i) { return { label: r.label, pct: percents[i] }; })
       .filter(function (r) { return r.pct > 0; })
       .sort(function (a, b) { return b.pct - a.pct; });
-    if (!ranked.length) return "No open pipeline to analyse.";
+    if (!ranked.length) return "No confirmed deals to analyse.";
     const top = ranked.slice(0, 3);
     const covered = top.reduce(function (t, r) { return t + r.pct; }, 0);
     const where = state.country === "ALL" ? "all-country" : state.country;
     return "Top service: " + top[0].label + " (" + App.formatPct(top[0].pct) + ") · " +
       plural(top.length, "service") + (top.length === 1 ? " drives " : " drive ") + App.formatPct(covered) +
-      " of " + where + (ui.serviceMode === "value" ? " pipeline" : " deals");
+      " of " + where + (ui.serviceMode === "value" ? " confirmed amount" : " confirmed deals");
   }
 
   // Returns the card; card.draw() renders the chart once the card is in the document.
@@ -197,7 +316,7 @@
     const header = el("header", "card-header ov-card-header");
     const heading = el("div");
     heading.append(el("h2", "card-title", "Service contribution"),
-      el("p", "card-subtitle", "Share of pipeline by service · " + countryLabel(state)));
+      el("p", "card-subtitle", "Share of confirmed deals by service, closing date in " + App.periodText(state.range) + " · " + countryLabel(state)));
     const controls = el("div", "sv-controls");
     header.append(heading, controls);
 
@@ -210,8 +329,9 @@
     const mode = function () { return ui.serviceMode === "value" ? "value" : "deals"; };
     const byCountry = function () { return state.country === "ALL" && ui.serviceView === "country"; };
     const colorOf = function (s) { return ui.services.size && !ui.services.has(s.key) ? GREY : s.color; };
+    // In "Deals" a deal with n services counts 1/n to each, so the shares add up to the number of deals.
     const tooltipText = function (s, pct) {
-      return s.label + " · " + (mode() === "value" ? App.formatINR(s.value) : plural(s.deals, "deal")) + " · " + App.formatPct(pct);
+      return s.label + " · " + (mode() === "value" ? App.formatINR(s.value) : "in " + plural(s.dealCount, "deal")) + " · " + App.formatPct(pct);
     };
 
     function drawControls() {
@@ -274,8 +394,8 @@
       const total = data.services.reduce(function (t, s) { return t + s[mode()]; }, 0);
       const center = el("div", "sv-center");
       center.append(
-        el("strong", "", mode() === "value" ? App.formatINR(total) : App.formatCount(total)),
-        el("span", "", mode() === "value" ? "total pipeline" : "deals")
+        el("strong", "", mode() === "value" ? App.formatINR(total) : App.formatCount(data.kpis.confirmedCount)),
+        el("span", "", mode() === "value" ? "confirmed amount" : "confirmed deals")
       );
       parts.box.appendChild(center);
       side.appendChild(parts.box);
@@ -315,13 +435,12 @@
         return Data.shares(c.services.map(function (s) { return s[mode()]; }));
       });
       const totals = countries.map(function (c) {
-        const n = c.services.reduce(function (t, s) { return t + s[mode()]; }, 0);
-        return mode() === "value" ? App.formatINR(n) : plural(n, "deal");
+        return mode() === "value" ? App.formatINR(c.total) : plural(c.count, "deal");
       });
       const parts = chartBox("sv-bars");
       parts.canvas.setAttribute("aria-label", countries.map(function (c, i) { return c.country + " " + totals[i]; }).join("; "));
-      side.append(parts.box, el("p", "sv-caption", "Each bar adds up to 100% of that country's " +
-        (mode() === "value" ? "pipeline." : "deals.")));
+      side.append(parts.box, el("p", "sv-caption", "Each bar adds up to 100% of that country's confirmed " +
+        (mode() === "value" ? "amount." : "deals.")));
       if (!window.Chart) return;
       chart = new Chart(parts.canvas, {
         type: "bar",
@@ -365,7 +484,7 @@
       drawTiles(percents);
       side.replaceChildren();
       const total = data.services.reduce(function (t, s) { return t + s[mode()]; }, 0);
-      if (!total) side.appendChild(el("p", "ov-muted", "No open pipeline."));
+      if (!total) side.appendChild(el("p", "ov-muted", "No confirmed deals in this period."));
       else if (byCountry()) drawByCountry();
       else drawDonut(percents);
       if (!window.Chart) side.appendChild(el("p", "ov-muted", "The chart library could not be loaded."));
@@ -423,7 +542,15 @@
         plot.appendChild(col);
       });
 
-      card.body.replaceChildren(plot, App.legend(series.map(function (s) {
+      const won = data.wonLost.reduce(function (t, m) { return t + m.won; }, 0);
+      const lost = data.wonLost.reduce(function (t, m) { return t + m.lost; }, 0);
+      const totals = el("div", "nc-stats");
+      totals.append(
+        stat("Won", App.formatCount(won), App.formatINR(data.revenueTrend.reduce(function (t, m) { return t + m.revenue; }, 0))),
+        stat("Lost", App.formatCount(lost), App.formatINR(data.wonLost.reduce(function (t, m) { return t + m.lostValue; }, 0))),
+        stat("Win rate", App.formatPct(data.kpis.winRate), "Won ÷ closed")
+      );
+      card.body.replaceChildren(totals, plot, App.legend(series.map(function (s) {
         return { label: s.name, color: s.color };
       }), "ov-legend"));
     }
@@ -556,7 +683,9 @@
 
     const header = el("header", "card-header ov-card-header");
     const heading = el("div");
-    heading.append(el("h2", "card-title", "Sales pipeline"), el("p", "card-subtitle", "Click a row to open the deal · " + countryLabel(state)));
+    heading.append(el("h2", "card-title", "Confirmed deals"), el("p", "card-subtitle", "Closed-won, closing date in " +
+      App.periodText(state.range) + " · click a row to open the deal · " + countryLabel(state)));
+    const deals = data.confirmedDeals;
     const viewAll = button("btn-outline");
     header.append(heading, viewAll);
 
@@ -569,14 +698,12 @@
     input.value = ui.search;
     search.append(icon("search"), input);
 
-    const stageNames = unique(Data.STAGES.map(function (s) { return s.name; }).concat(data.deals.map(function (d) { return d.stage; })));
-    if (stageNames.indexOf(ui.stage) === -1) ui.stage = "";
-    toolbar.append(search, selectBox("Stage", [["", "All stages"]].concat(stageNames.map(function (s) { return [s, s]; })),
-      ui.stage, function (v) { ui.stage = v; refresh(true); }));
+    // Every row is Closed-won, so there is no stage filter.
+    toolbar.append(search);
 
     // Only offered when the header filter is "All countries".
     if (state.country === "ALL") {
-      const countries = unique(data.deals.map(function (d) { return d.country; })).sort();
+      const countries = unique(deals.map(function (d) { return d.country; })).sort();
       if (countries.indexOf(ui.country) === -1) ui.country = "";
       toolbar.appendChild(selectBox("Country", [["", "All countries"]].concat(countries.map(function (c) { return [c, c]; })),
         ui.country, function (v) { ui.country = v; refresh(true); }));
@@ -626,10 +753,9 @@
     function refresh(resetPage) {
       if (resetPage) ui.page = 1;
       const q = ui.search.trim().toLowerCase();
-      const rows = data.deals.filter(function (d) {
-        return (!ui.stage || d.stage === ui.stage) &&
-          (!ui.country || d.country === ui.country) &&
-          (!ui.services.size || ui.services.has(Data.serviceKey(d.service))) &&
+      const rows = deals.filter(function (d) {
+        return (!ui.country || d.country === ui.country) &&
+          (!ui.services.size || d.serviceKeys.some(function (k) { return ui.services.has(k); })) &&
           (!q || [d.name, d.account, d.contact, d.service, d.owner].join(" ").toLowerCase().indexOf(q) !== -1);
       }).sort(function (a, b) { return compare(a, b) * ui.sortDir; });
 
@@ -639,7 +765,7 @@
 
       tbody.replaceChildren.apply(tbody, visible.map(dealRow));
       if (!visible.length) {
-        const td = el("td", "ov-empty", "No deals match these filters.");
+        const td = el("td", "ov-empty", deals.length ? "No deals match these filters." : "No confirmed deals in this period.");
         td.colSpan = COLUMNS.length;
         const tr = el("tr");
         tr.appendChild(td);
@@ -656,7 +782,7 @@
 
       // Rows across all pages, and whether any table filter is narrowing them.
       tbody.dataset.count = rows.length;
-      tbody.dataset.filtered = String(!!(q || ui.stage || ui.country || ui.services.size));
+      tbody.dataset.filtered = String(!!(q || ui.country || ui.services.size));
       count.textContent = plural(rows.length, "deal");
       position.textContent = ui.page + " / " + pages;
       prev.disabled = ui.page <= 1;
@@ -695,14 +821,16 @@
     }
     onSelection = [];
 
-    const half = el("div", "ov-split");
-    half.append(renderFunnel(data, state), renderStages(data));
+    const stages = renderUnconfirmed(data, state);
     const services = renderServices(data, state);
     const thirds = el("div", "ov-split ov-split-wide");
     thirds.append(renderWonLost(data, state), renderActivity(data, state));
     const risk = el("div", "nc-row");
     risk.append(Cards.forecast(data, state), Cards.atRisk(data, state));
-    root.replaceChildren(renderBanner(data, state), renderKpis(data), half, services, risk, thirds, renderTable(data, state));
+    const leads = el("div", "ov-split ov-split-wide");
+    leads.append(renderLeads(data, state), renderLeadStatus(data, state));
+    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
+      renderTable(data, state));
     services.draw();
   }
 

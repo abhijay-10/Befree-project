@@ -140,6 +140,21 @@ test('roles', () => {
   assert.equal(R.canSee(u('BDE'), { createdById: 'x', ownerId: 'y' }), false);
   assert.ok(R.canSee(u('BDE'), { createdById: 'me' }) && R.canSee(u('BDE'), { ownerId: 'me' }) && R.canSee(u('Marketing'), {}));
 });
+test('service amounts add up to the deal amount', () => {
+  const d = o => ({ services: ['Accounting Services', 'Payroll Services', 'Bookkeeping Services'], amount: 10000000, expected: 2000000, prob: 20, serviceAmounts: {}, ...o });
+  const a = o => R.amounts(d(o));
+  const all = a({ serviceAmounts: { 'Accounting Services': 100, 'Payroll Services': '200', 'Bookkeeping Services': 50.5, 'Tax Services': 999 } });
+  assert.deepEqual(all.list.map(x => x.amount), [100, 200, 50.5]);
+  assert.deepEqual([all.total, all.expected, all.set], [350.5, 70.1, 3]); // a service that is not chosen does not count
+  const some = a({ serviceAmounts: { 'Accounting Services': 100, 'Payroll Services': null, 'Bookkeeping Services': '' } });
+  assert.deepEqual([some.total, some.set, some.list[1].amount], [100, 1, null]);
+  for (const o of [{}, { serviceAmounts: undefined }, { services: [] }, { serviceAmounts: { 'Payroll Services': 0 } }]) assert.deepEqual([a(o).total, a(o).expected, a(o).used], [10000000, 2000000, false]);
+  assert.equal(a({ prob: null, serviceAmounts: { 'Payroll Services': 5 } }).expected, null);
+});
+test('every service amount API name is one the user gave', () => {
+  const services = ['Accounting', 'Audit Support', 'Bookkeeping', 'Mortgage', 'Paraplanning', 'Payroll', 'Tax', 'Virtual Admin'].map(x => x + ' Services');
+  assert.deepEqual(C.serviceAmounts, Object.fromEntries(services.map(x => [x, x.replace(/ /g, '_') + '_Amount'])));
+});
 test('every Deals API name is one the user gave', () => {
   const given = ['Account_Name', 'Amount', 'Campaign_Source', 'Closing_Date', 'Connected_To__s', 'Contact_Name', 'Created_By', 'Record_Image', 'Deal_Name', 'Owner', 'Description', 'Expected_Revenue', 'Lead_Source', 'Modified_By', 'Next_Step', 'Probability', 'Reason_For_Loss__s', 'Stage', 'Tag', 'Type', 'Services_List'];
   for (const n of Object.values(C.deal).concat(C.timeline)) assert.ok(given.includes(n), n);

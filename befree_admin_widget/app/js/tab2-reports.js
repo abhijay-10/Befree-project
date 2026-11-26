@@ -5,7 +5,9 @@
   const TEMPERATURES = [
     { name: "Hot", color: "var(--red)" },
     { name: "Warm", color: "var(--orange)" },
-    { name: "Cold", color: "var(--grey-blue)" }
+    { name: "Cold", color: "var(--grey-blue)" },
+    { name: "Not enough data", color: "#C9D2E3" },
+    { name: "Not checked yet", color: "#E6EAF2" }
   ];
 
   const el = App.el;
@@ -23,7 +25,7 @@
   function emptyNote(text) { return el("p", "rp-empty", text); }
 
   function renderAttribution(data, state) {
-    const card = reportCard("Marketing attribution", "Sourced vs influenced · " + countryLabel(state), data.unavailable);
+    const card = reportCard("Marketing attribution", "Confirmed amount by source channel · " + countryLabel(state), data.unavailable);
     card.body.appendChild(App.attributionBars(data));
     return card;
   }
@@ -54,37 +56,64 @@
     return card;
   }
 
-  // rows = [{label, value, text}]
-  function renderBars(title, state, isSample, rows, color, extraClass) {
-    const card = reportCard(title, "Open value · " + countryLabel(state), isSample, "rp-pipeline");
-    if (extraClass) card.classList.add(extraClass);
-    const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.value; })));
-    rows.forEach(function (r) {
-      card.body.appendChild(App.horizontalBarRow(r.label, r.text, r.value / max * 100, color));
-    });
-    if (!rows.length) card.body.appendChild(emptyNote("No open deals."));
+  // Each switch card keeps its own choice, so switching one never changes another.
+  const choice = { country: "won", service: "won" };
+
+  /*
+   * A bar card with the Won only / Won + Open switch. rowsOf(block) gives [{label, value, text}] for one option
+   * (data.options.won / .open / .wonOpen). The card total is the option's amount, so the bars add up to it.
+   */
+  function switchCard(key, title, data, state, rowsOf, color) {
+    const card = reportCard(title, "", data.unavailable, "rp-pipeline");
+    card.dataset.check = "switch-" + key;
+    const header = card.querySelector(".card-header");
+    header.classList.add("ov-card-header");
+    const heading = el("div");
+    heading.append.apply(heading, Array.from(header.childNodes));
+    const subtitle = heading.querySelector(".card-subtitle") || heading.appendChild(el("p", "card-subtitle"));
+    header.append(heading);
+
+    function draw() {
+      const o = choice[key];
+      const block = data.options[o];
+      subtitle.textContent = App.optionText(o, state.range) + " · " + countryLabel(state);
+      header.replaceChildren(heading, App.optionSwitch(o, function (next) { choice[key] = next; draw(); }));
+      card.dataset.option = o;
+      card.dataset.total = block.amount;
+      const rows = rowsOf(block).filter(function (r) { return r.value > 0; });
+      card.dataset.rowsTotal = rows.reduce(function (t, r) { return t + r.value; }, 0);
+      const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.value; })));
+      card.body.replaceChildren();
+      if (o === "wonOpen") card.body.appendChild(App.splitLine(data.options.won.amount, data.options.open.amount));
+      rows.forEach(function (r) {
+        card.body.appendChild(App.horizontalBarRow(r.label, r.text, r.value / max * 100, color));
+      });
+      if (!rows.length) card.body.appendChild(emptyNote(o === "won" ? "No won deals in this period." : "No won or open deals."));
+    }
+    draw();
     return card;
   }
 
   function renderByCountry(data, state) {
-    const list = data.pipelineByCountry;
-    const percents = Data.shares(list.map(function (c) { return c.value; }));
-    // The share is shown only when there are several countries to compare.
-    const rows = list.map(function (c, i) {
-      return {
-        label: c.label,
-        value: c.value,
-        text: App.formatINR(c.value) + (state.country === "ALL" ? " · " + App.formatPct(percents[i]) : "")
-      };
-    });
-    return renderBars("Pipeline by country", state, data.unavailable, rows, "#5B7FE8");
+    return switchCard("country", "Amount by country", data, state, function (block) {
+      // Shares are recalculated from the amounts, never averaged; shown only when there are several countries.
+      const percents = Data.shares(block.byCountry.map(function (c) { return c.value; }));
+      return block.byCountry.map(function (c, i) {
+        return {
+          label: c.label === Data.OTHER_COUNTRY ? "Country not set" : c.label,
+          value: c.value,
+          text: App.formatINR(c.value) + (state.country === "ALL" ? " · " + App.formatPct(percents[i]) : "")
+        };
+      }).sort(function (a, b) { return b.value - a.value; });
+    }, "#5B7FE8");
   }
 
   function renderByService(data, state) {
-    const rows = data.pipelineByServiceLine.map(function (s) {
-      return { label: s.label, value: s.value, text: App.formatINR(s.value) };
-    });
-    return renderBars("Pipeline by service line", state, data.unavailable, rows, "var(--blue)");
+    return switchCard("service", "Amount by service", data, state, function (block) {
+      return block.services.map(function (s) {
+        return { label: s.label, value: s.value, text: App.formatINR(s.value) };
+      }).sort(function (a, b) { return b.value - a.value; });
+    }, "var(--blue)");
   }
 
   function donut(segments, total) {
@@ -95,7 +124,7 @@
     svg.setAttribute("class", "rp-donut");
     svg.setAttribute("viewBox", "0 0 150 150");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", total + " accounts: " + segments.map(function (s) { return s.name + " " + s.count; }).join(", "));
+    svg.setAttribute("aria-label", total + " open leads: " + segments.map(function (s) { return s.name + " " + s.count; }).join(", "));
 
     const visible = segments.filter(function (s) { return s.count > 0; });
     let start = 0;
@@ -131,17 +160,19 @@
   }
 
   function renderTemperature(data, state) {
-    const card = reportCard("Account temperature", "Hot, Warm and Cold accounts · " + countryLabel(state), data.unavailable);
+    const card = reportCard("Lead temperature", "Open leads only, without converted, lost and junk leads · " + countryLabel(state), data.unavailable);
     const segments = TEMPERATURES.map(function (t) {
       return { name: t.name, color: t.color, count: data.temperature[t.name] || 0 };
     });
     const total = segments.reduce(function (n, s) { return n + s.count; }, 0);
-    if (!total) {
-      card.body.appendChild(emptyNote("No account temperature data."));
+    if (!segments.some(function (s) { return s.count && s.name !== "Not checked yet"; })) {
+      card.body.appendChild(emptyNote(total ? (total === 1 ? "1 open lead, not checked yet. " : total + " open leads, not checked yet. ") + "Open a lead and click AI summary." : "No open leads."));
       return card;
     }
     const box = el("div", "rp-temperature");
-    box.append(donut(segments, total), App.legend(segments.map(function (s) {
+    box.dataset.check = "temperature";
+    box.dataset.total = total;
+    box.append(donut(segments, total), App.legend(segments.filter(function (s, i) { return i < 3 || s.count; }).map(function (s) {
       return { label: s.name + ": " + s.count, color: s.color };
     }), "rp-legend"));
     card.body.appendChild(box);

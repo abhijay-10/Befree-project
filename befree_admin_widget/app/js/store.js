@@ -2,8 +2,8 @@
 window.Store = (function () {
   "use strict";
 
-  const COUNTRIES = { ALL: "All countries", US: "United States", UK: "United Kingdom", AU: "Australia" };
-  const RANGES = ["7d", "30d", "90d", "12m"];
+  const COUNTRIES = { ALL: "All countries", US: "United States", UK: "United Kingdom", AU: "Australia", Other: "Country not set" };
+  const RANGES = ["7d", "30d", "90d", "12m", "all"];
 
   const state = { country: "US", range: "30d" };
 

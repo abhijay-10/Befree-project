@@ -8,7 +8,7 @@ window.Cards = (function () {
 
   const el = App.el;
   const BLUES = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2", "#B3C3F5"];
-  const CHANNEL_COLORS = ["#2352E5", "#5B7FE8", "#93A9F0", "#16A06B", "#E8890C", "#D64545", "#8D9FC9", "#7C5CE0"];
+  const CHANNEL_COLORS = ["#2352E5", "#5B7FE8", "#93A9F0", "#16A06B", "#E8890C", "#D64545", "#8D9FC9", "#7C5CE0", "#C4C9D4"];
   const RISK_ROWS = 5;
 
   // Card choices survive re-renders.
@@ -174,25 +174,23 @@ window.Cards = (function () {
   function forecast(data, state) {
     const f = data.forecastVsTarget;
     const s = shell("forecast", "Forecast vs target", "Quarter to date · " + countryLabel(state),
-      "Attainment = (closed-won this quarter + weighted forecast of open deals) ÷ target.");
+      "Attainment = confirmed (Closed-won) amount with a closing date this quarter ÷ target. Open deals are not added.");
     if (!f.target) {
-      s.body.appendChild(emptyState(state));
+      s.body.appendChild(f.target === null ? el("p", "nc-empty", "Could not load sales targets") : emptyState(state));
       return s.card;
     }
     const parts = [
-      { label: "Closed-won", value: f.closedWon, color: "var(--green)" },
-      { label: "Weighted forecast", value: f.forecast, color: "var(--blue)" },
+      { label: "Confirmed", value: f.closedWon, color: "var(--green)" },
       { label: "Gap to target", value: f.gap, color: "#EEF1F6" }
     ];
-    const scale = Math.max(f.target, f.closedWon + f.forecast);
+    const scale = Math.max(f.target, f.closedWon);
 
     const legend = el("div", "nc-legend");
     parts.forEach(function (p, i) {
       const item = el("span", "rp-legend-item");
       const dot = el("span", "rp-dot");
-      dot.style.background = i === 2 ? "#DDE1E9" : p.color;
+      dot.style.background = i === 1 ? "#DDE1E9" : p.color;
       const value = el("strong", "", App.formatINR(p.value));
-      if (i === 1) value.dataset.check = "fc-forecast";
       item.append(dot, p.label + " ", value);
       legend.appendChild(item);
     });
@@ -207,15 +205,16 @@ window.Cards = (function () {
     if (state.country === "ALL") {
       const list = el("div", "nc-countries");
       f.byCountry.forEach(function (c) {
+        const other = Data.CODES.indexOf(c.country) === -1; // "Country not set" has no filter of its own
         const row = button("nc-country");
-        row.title = "Show " + c.country + " only";
+        row.title = other ? "Deals with no US, UK or AU country" : "Show " + c.country + " only";
         const pct = el("strong", "", App.formatPct(c.pct));
         pct.style.color = attainColor(c.pct);
-        row.append(el("span", "", c.country), stack([
-          { label: "Closed-won", value: c.closedWon, color: "var(--green)" },
-          { label: "Weighted forecast", value: c.forecast, color: "var(--blue)" }
-        ], Math.max(c.target || 0, c.closedWon + c.forecast)), pct);
-        row.addEventListener("click", function () { Store.setCountry(c.country); });
+        row.append(el("span", "", other ? "Not set" : c.country), stack([
+          { label: "Confirmed", value: c.closedWon, color: "var(--green)" }
+        ], Math.max(c.target || 0, c.closedWon)), pct);
+        if (other) row.disabled = true;
+        else row.addEventListener("click", function () { Store.setCountry(c.country); });
         list.appendChild(row);
       });
       s.body.appendChild(list);
@@ -232,10 +231,10 @@ window.Cards = (function () {
   }
 
   function atRisk(data, state) {
-    const s = shell("at-risk", "At-risk deals", "Open deals needing attention · " + countryLabel(state),
-      "At risk if any is true: no logged activity for more than the selected days; close date passed while open; " +
-      "same stage for more than 30 days. Most severe shown first (Overdue, then Stuck, then No activity). " +
-      "% of open pipeline = at-risk value ÷ value of the listed open deals.");
+    const s = shell("at-risk", "At-risk deals", "Unconfirmed deals needing attention · " + countryLabel(state),
+      "Unconfirmed deals only (open, 10% to 90%). At risk if any is true: no logged activity for more than the selected days; " +
+      "close date passed while open; same stage for more than 30 days. Each deal is listed once, with its most severe reason " +
+      "first (Overdue, then Stuck, then No activity). % of unconfirmed amount = at-risk amount ÷ all unconfirmed amount. Dates are your local dates.");
     const badge = el("span", "pill pill-red");
     s.titleRow.appendChild(badge);
 
@@ -262,7 +261,7 @@ window.Cards = (function () {
     }));
 
     const strip = el("div", "nc-stats");
-    const stats = ["Deals at risk", "Value at risk", "% of open pipeline"].map(function (label) {
+    const stats = ["Deals at risk", "Value at risk", "% of unconfirmed amount"].map(function (label) {
       const box = el("div", "nc-stat");
       const value = el("strong");
       box.append(el("span", "", label), value);
@@ -284,6 +283,7 @@ window.Cards = (function () {
     table.append(thead, tbody);
     scroller.appendChild(table);
     const viewAll = button("btn-outline nc-viewall");
+    const note = el("p", "nc-summary");
 
     function draw() {
       result = Data.atRisk(data.deals, ui.threshold, data.asOf);
@@ -321,12 +321,14 @@ window.Cards = (function () {
       }
       viewAll.textContent = ui.riskAll ? "Show less" : "View all";
       viewAll.hidden = result.count <= RISK_ROWS;
+      note.textContent = result.openCount && !result.stageDatesKnown
+        ? "The \"stuck in stage\" rule could not be checked: CRM gave no stage date for these deals." : "";
       if (s.card.isConnected) Checks.atRisk(data);
     }
 
     select.addEventListener("change", function () { ui.threshold = Number(select.value); draw(); });
     viewAll.addEventListener("click", function () { ui.riskAll = !ui.riskAll; draw(); });
-    s.body.append(strip, scroller, viewAll);
+    s.body.append(strip, scroller, viewAll, note);
     draw();
     return s.card;
   }
@@ -367,7 +369,7 @@ window.Cards = (function () {
       count.dataset.check = "stage-count";
       const bar = el("div", "nc-stage-bar");
       bar.style.height = (x.count / max * 100) + "%";
-      bar.style.background = BLUES[i];
+      bar.style.background = BLUES[Math.min(i, BLUES.length - 1)];
       track.appendChild(bar);
       col.append(el("span", "nc-stage-name", x.stage), count, track, el("span", "nc-stage-days", "Avg " + days(x.avgDays)));
       row.appendChild(col);
@@ -563,9 +565,10 @@ window.Cards = (function () {
 
   function channelTrend(data, state) {
     const t = data.channelTrend;
-    const s = shell("trend", "Channel trend over time", "Monthly revenue by channel · " + countryLabel(state),
-      "Channel share = the channel's value ÷ the total of all channels in that month. " +
-      "Sourced and influenced are reported separately and never added together.");
+    const s = shell("trend", "Channel trend over time", "Monthly confirmed amount by channel, by closing date · " + countryLabel(state),
+      "Confirmed (Closed-won) deals only. Channel share = the channel's value ÷ the total of all channels in that month. " +
+      "Sourced: each deal counts once, under its source or \"Other / not set\". " +
+      "Influenced: a deal counts under every channel its contact engaged with, so these are never added together.");
     s.card.draw = function () {};
     const empty = !t.sourced.concat(t.influenced).some(function (row) { return row.some(function (v) { return v > 0; }); });
     if (empty) {

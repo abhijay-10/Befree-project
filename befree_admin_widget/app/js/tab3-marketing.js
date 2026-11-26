@@ -5,9 +5,10 @@
   const el = App.el;
   const ratioText = function (v) { return v === null || v === undefined ? "—" : v.toFixed(1) + "x"; };
 
+  // `option`: the card has a Won only / Won + Open switch, and reads that field of data.options.
   const KPI_ROW_1 = [
-    { key: "influenced", title: "Marketing-influenced pipeline", format: App.formatINR, tone: "green", check: "influenced" },
-    { key: "sourcedRevenue", title: "Marketing-sourced revenue", format: App.formatINR },
+    { key: "influenced", title: "Marketing influenced", format: App.formatINR, tone: "green", check: "influenced", option: "influenced" },
+    { key: "sourcedRevenue", title: "Marketing-sourced revenue", format: App.formatINR, option: "sourced" },
     { key: "webinar", title: "Webinar attendance", format: App.formatCount },
     { key: "events", title: "Event participants", format: App.formatCount },
     { key: "linkedin", title: "LinkedIn engagements", format: App.formatCount },
@@ -15,8 +16,12 @@
   ];
   const KPI_ROW_2 = [
     { key: "leads", title: "Leads generated", format: App.formatCount },
-    { key: "roi", title: "Marketing ROI", format: ratioText }
+    { key: "roi", title: "Marketing ROI", format: ratioText, option: "sourced", roi: true }
   ];
+  // Each switch card keeps its own choice.
+  const choice = { influenced: "won", sourcedRevenue: "won", roi: "won" };
+  // TODO: replace once the rule for matching open deals to campaign spend is approved.
+  const POTENTIAL_ROI_RULE = null;
 
   const FUNNEL_COLORS = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2"];
   const STATUS_TYPES = { Active: "green", Paused: "grey", Ended: "blue" };
@@ -25,14 +30,14 @@
     { key: "channel", label: "Channel" },
     { key: "spend", label: "Spend", format: App.formatINR, number: true },
     { key: "leads", label: "Leads", format: App.formatCount, number: true },
-    { key: "pipeline", label: "Pipeline", format: App.formatINR, number: true },
+    { key: "confirmed", label: "Confirmed", format: App.formatINR, number: true },
     { key: "roi", label: "ROI", format: ratioText, number: true },
     { key: "status", label: "Status" }
   ];
   const ROWS = 5;
 
   let root = null;
-  const table = { sortKey: "pipeline", sortDir: -1, showAll: false };
+  const table = { sortKey: "confirmed", sortDir: -1, showAll: false };
 
   function button(className, text) {
     const b = el("button", className, text);
@@ -53,26 +58,62 @@
     return pill;
   }
 
-  function renderKpis(data, items, className) {
+  function renderKpis(data, state, items, className) {
     const kpis = data.marketingKpis;
     const row = el("div", className);
     items.forEach(function (k) {
-      const value = kpis[k.key];
-      const known = value !== null && value !== undefined;
       const card = el("article", "card mk-kpi");
-      const top = el("div", "mk-kpi-top");
-      top.appendChild(el("h2", "mk-kpi-title", k.title));
-      if (kpis.delta[k.key]) top.appendChild(trend(kpis.delta[k.key]));
-      const number = el("div", "mk-kpi-value" + (k.tone === "green" && known ? " is-green" : ""), k.format(value));
-      if (k.check) number.dataset.check = k.check;
-      card.append(top, number);
+      if (!k.option) {
+        fill(card, k, kpis[k.key], kpis.delta[k.key]);
+        row.appendChild(card);
+        return;
+      }
+      card.dataset.check = "switch-" + k.key;
+      function draw() {
+        const o = choice[k.key];
+        card.replaceChildren();
+        card.dataset.option = o;
+        const won = data.options.won[k.option], open = data.options.open[k.option];
+        if (k.roi) {
+          // Won only: won revenue and spend of the same period. No spend: "Not available", never 0 or infinity.
+          const value = o === "won" ? kpis.roi : POTENTIAL_ROI_RULE ? POTENTIAL_ROI_RULE(data) : null;
+          fill(card, Object.assign({}, k, { title: o === "won" ? "Marketing ROI" : "Potential ROI" }),
+            value, o === "won" ? kpis.delta.roi : undefined,
+            o === "won" ? (kpis.spend ? null : "Not available") : (POTENTIAL_ROI_RULE ? null : "Awaiting approval"));
+          card.appendChild(el("p", "mk-kpi-option", o === "won"
+            ? "Won only · won revenue and campaign spend, both in " + App.periodText(state.range)
+            : "Won + Open · open money is not yet earned"));
+          if (o === "wonOpen") card.appendChild(App.splitLine(won, open));
+          card.appendChild(el("p", "opt-split", "Spend " + (kpis.spend ? App.formatINR(kpis.spend) : "not available")));
+        } else {
+          const value = o === "won" ? won : data.options.wonOpen[k.option];
+          card.dataset.total = value === null ? "" : value;
+          fill(card, k, value, o === "won" ? kpis.delta[k.key] : undefined);
+          card.appendChild(el("p", "mk-kpi-option", o === "won" ? "Won only · closing date in " + App.periodText(state.range)
+            : "Won + Open · open deals as of today, not date-filtered"));
+          if (o === "wonOpen") card.appendChild(App.splitLine(won, open));
+        }
+        card.appendChild(App.optionSwitch(o, function (next) { choice[k.key] = next; draw(); }));
+      }
+      draw();
       row.appendChild(card);
     });
     return row;
   }
 
+  // Title, trend badge (only when real history exists) and value. `text` replaces the formatted value.
+  function fill(card, k, value, delta, text) {
+    const known = value !== null && value !== undefined;
+    const top = el("div", "mk-kpi-top");
+    top.appendChild(el("h2", "mk-kpi-title", k.title));
+    if (delta) top.appendChild(trend(delta));
+    const number = el("div", "mk-kpi-value" + (k.tone === "green" && known ? " is-green" : ""), text || k.format(value));
+    if (k.check) number.dataset.check = k.check;
+    card.append(top, number);
+  }
+
   function renderChannels(data, state) {
-    const card = App.card("Channel contribution", "Sourced and influenced revenue, reported separately · " + countryLabel(state));
+    const card = App.card("Channel contribution", "Confirmed amount sourced by each channel · " + countryLabel(state));
     if (data.unavailable) card.querySelector(".card-title").append(" ", App.pill("CRM data unavailable", "orange"));
     card.body.appendChild(App.attributionBars(data, "mk-legend"));
     return card;
@@ -82,10 +123,11 @@
     const card = App.card("How attribution works");
     const box = el("p", "mk-explainer");
     box.append(
-      el("strong", "", "Sourced"), ": the channel that created the opportunity. ",
+      el("strong", "", "Sourced"), ": the channel that created the deal. Only confirmed (Closed-won) deals count, by closing date. " +
+      "A deal whose source matches no channel is shown as Other / not set, so the channels add up to the confirmed total. ",
       el("strong", "", "Influenced"), ": a contact engaged in the 180 days before the deal was created."
     );
-    card.body.append(box, el("p", "mk-note", "A deal can be sourced by one channel and influenced by several. The two totals are never added together."));
+    card.body.append(box, el("p", "mk-note", "A deal can be sourced by one channel and influenced by several. Influenced is counted once per deal in its total."));
     return card;
   }
 
@@ -191,8 +233,8 @@
     bottom.append(renderLeadFunnel(data, state), renderCampaigns(data, state));
     const trendCard = Cards.channelTrend(data, state);
     root.replaceChildren(
-      renderKpis(data, KPI_ROW_1, "mk-kpis"),
-      renderKpis(data, KPI_ROW_2, "mk-kpis mk-kpis-2"),
+      renderKpis(data, state, KPI_ROW_1, "mk-kpis"),
+      renderKpis(data, state, KPI_ROW_2, "mk-kpis mk-kpis-2"),
       attribution,
       bottom,
       trendCard

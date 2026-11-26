@@ -84,6 +84,11 @@
     }).filter(Boolean);
   }
 
+  // The lead among the participants of a meeting
+  const guestOf = (meeting, leadId, email) => (meeting.Participants || []).find(p => String(id(p.participant)) === String(leadId) ||
+    (email && String(p.Email || p.participant || '').toLowerCase() === String(email).toLowerCase())) || null;
+  const isInvited = guest => !!guest && guest.invited === true;
+
   async function loadLead(leadId) {
     const L = C.lead, T = F.touch, problems = {};
     const service = await meta();
@@ -107,9 +112,21 @@
     const u = (me && me.users && me.users[0]) || {};
     const deal = c[L.convertedDeal];
     const seen = new Set();
+    const meetings = next.concat(past).filter(r => r.Start_DateTime && !seen.has(r.id) && seen.add(r.id)).map(r => ({
+      id: r.id, start: r.Start_DateTime, bookedOn: r.Created_Time || r.Start_DateTime, selfBooked: !!(L.selfBooked && r[L.selfBooked]),
+      outcome: (L.outcome && r[L.outcome]) || '', reason: (L.reason && r[L.reason]) || '', reschedules: (L.reschedules && r[L.reschedules]) || 0
+    }));
+    // The invitation of the latest meeting: from its participants, with the note as the record of when it was sent
+    const latest = root.BefreeRules.latestMeeting({ meetings });
+    if (latest) {
+      const sent = notes.filter(n => n.Note_Title === C.inviteNote && new Date(n.Created_Time) >= new Date(latest.bookedOn)).sort((a, b) => new Date(b.Created_Time) - new Date(a.Created_Time))[0];
+      const guest = await one(M.meeting, latest.id).then(r => guestOf(r, c.id, c[L.email]), () => null);
+      Object.assign(latest, { invited: !!sent || isInvited(guest), invitedOn: sent ? sent.Created_Time : null, reply: guest ? String(guest.status || '').toLowerCase() : '' });
+    }
     return {
       live: true, isLead: true, now: new Date(), problems, service, created: c.Created_Time, modified: c.Modified_Time, described: c.Description || '', website: c[L.website] || '',
       aiField: !!(service.fields && service.fields.some(f => f.api_name === C.ai.savedField)), aiSaved: c[C.ai.savedField] || '',
+      heatField: !!(service.fields && service.fields.some(f => f.api_name === C.ai.temperatureField)), heat: c[C.ai.temperatureField] || '',
       editable: editable(service.fields, c),
       notes: notes.map(n => ({ id: n.id, title: n.Note_Title || '', text: n.Note_Content || '', at: n.Created_Time || n.Modified_Time, by: name(n.Created_By) || name(n.Owner) })).sort((a, b) => new Date(b.at) - new Date(a.at)),
       details: [
@@ -126,10 +143,7 @@
       contacts: people,
       touches: touches.map(r => ({ id: r.id, contactId: id(r[L.touchLookup]), contactName: (people.find(p => p.id === id(r[L.touchLookup])) || {}).name || '', type: r[T.type], channel: r[T.channel], date: r[T.date] })),
       tasks: tasks.map(r => ({ id: r.id, type: (L.taskType && r[L.taskType]) || r.Subject, owner: name(r.Owner), due: r.Due_Date, open: !C.closedTaskStatus.includes(r.Status) })),
-      meetings: next.concat(past).filter(r => r.Start_DateTime && !seen.has(r.id) && seen.add(r.id)).map(r => ({
-        id: r.id, start: r.Start_DateTime, bookedOn: r.Created_Time || r.Start_DateTime, selfBooked: !!(L.selfBooked && r[L.selfBooked]),
-        outcome: (L.outcome && r[L.outcome]) || '', reason: (L.reason && r[L.reason]) || '', reschedules: (L.reschedules && r[L.reschedules]) || 0
-      })),
+      meetings,
       deals: deal ? [{ id: id(deal), name: name(deal), stage: '', raisedBy: u.id }] : []
     };
   }
@@ -190,7 +204,7 @@
         if (!r || !r.info || !r.info.more_records) break;
         if (page === 10) all.partial = true;
       }
-      const list = all.map(x => ({ id: x.id, name: person(x), sub: x[C.lead.company] || '', status: x[C.lead.status] || '', services: service.field ? many(x[service.field]) : [] }));
+      const list = all.map(x => ({ id: x.id, name: person(x), sub: x[C.lead.company] || '', status: x[C.lead.status] || '', services: service.field ? many(x[service.field]) : [], temperature: x[C.ai.temperatureField] || '', optedOut: !!x[C.lead.optedOut] }));
       list.partial = !!all.partial;
       return list;
     },
@@ -217,6 +231,23 @@
       await insert(M.meeting, only({ ...about(v), [F.meeting.title]: 'Meeting with ' + v.contact.name, [F.meeting.start]: stamp(start), [F.meeting.end]: stamp(new Date(start.getTime() + 1800000)), [v.isLead ? C.lead.reschedules : F.meeting.reschedules]: reschedules }));
       if (!v.isLead) await update(M.contact, { id: v.contact.id, [F.contact.lifecycle]: 'Meeting booked' });
       else if (C.lead.lifecycle) await update('Leads', { id: v.contact.id, [C.lead.lifecycle]: 'Meeting booked' });
+    },
+    // Adds the lead to the meeting and lets CRM email its own invitation. The meeting is read again to confirm it.
+    async invite(v, m) {
+      const meeting = await one(M.meeting, m.id);
+      const guests = (meeting.Participants || []).map(p => ({ id: p.id, type: p.type, participant: id(p.participant) }));
+      if (!guestOf(meeting, v.contact.id, v.contact.email)) guests.push({ type: 'lead', participant: v.contact.id });
+      await update(M.meeting, { id: m.id, Participants: guests, $send_notification: true });
+      // CRM marks the invitation a moment after saving the meeting, so the meeting is read a few times
+      let guest = null;
+      for (const wait of C.inviteChecks) {
+        await new Promise(done => setTimeout(done, wait));
+        guest = await one(M.meeting, m.id).then(r => guestOf(r, v.contact.id, v.contact.email), () => guest);
+        if (guest && guest.invited !== false) break;
+      }
+      if (!guest) throw new Error('CRM did not add this lead to the meeting.');
+      if (guest.invited === false) throw new Error('CRM added this lead to the meeting but has not marked it as invited yet. Reload this lead in a minute to check, or send the invitation from the meeting in CRM.');
+      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Leads', RecordID: v.contact.id, Title: C.inviteNote, Content: 'To ' + v.contact.email + ' for the meeting on ' + new Date(m.start).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.' }));
     },
     move: (v, m, start) => update(M.meeting, { id: m.id, [F.meeting.start]: stamp(start), [F.meeting.end]: stamp(new Date(start.getTime() + 1800000)), [v.isLead ? C.lead.reschedules : F.meeting.reschedules]: m.reschedules + 1 }),
     outcome: (v, m, f) => update(M.meeting, only({ id: m.id, [v.isLead ? C.lead.outcome : F.meeting.outcome]: f.outcome, [v.isLead ? C.lead.reason : F.meeting.reason]: f.outcome === 'Rejected' ? f.reason : null })),
@@ -254,10 +285,28 @@
       if (!list.length) throw new Error('No Deal stages were returned by CRM.');
       return list;
     },
+    // Contact roles and campaigns are choices only, so a list that cannot be read is left out (null)
+    async contactRoles() {
+      try {
+        const r = await Promise.race([ZOHO.CRM.API.getRecord({ Entity: 'Contacts', RecordID: 'roles' }), new Promise(done => setTimeout(done, 5000))]);
+        const list = r && (r.contact_roles || (r.data && r.data.contact_roles));
+        return list && list.length ? list.map(x => ({ id: x.id, name: x.name })) : null;
+      } catch (e) { return null; }
+    },
+    async campaigns() {
+      try {
+        const r = await ZOHO.CRM.API.getAllRecords({ Entity: 'Campaigns', sort_order: 'desc', per_page: 200, page: 1 });
+        return ((r && r.data) || []).map(x => ({ id: x.id, name: x.Campaign_Name || x.id }));
+      } catch (e) { return []; }
+    },
     // Converts the lead with CRM's own lead conversion, run by a CRM function
     async convert(v, f) {
       const fn = C.convert.functionName;
-      const details = { deal_name: f.dealName.trim(), stage: f.stage, closing_date: f.closingDate, amount: f.amount || '', account_id: f.accountId || '', contact_id: f.contactId || '' };
+      const make = !!f.createDeal;
+      const details = {
+        create_deal: String(make), deal_name: make ? f.dealName.trim() : '', stage: make ? f.stage : '', closing_date: make ? f.closingDate : '', amount: make ? f.amount || '' : '',
+        campaign_id: make ? f.campaignId || '' : '', contact_role: make ? f.contactRole || '' : '', owner_id: f.ownerId || '', account_id: f.accountId || '', contact_id: f.contactId || ''
+      };
       let r;
       try {
         r = await ZOHO.CRM.FUNCTIONS.execute(fn, { arguments: JSON.stringify({ lead_id: String(v.contact.id), details: JSON.stringify(details) }) });
@@ -268,8 +317,10 @@
         if (typeof out === 'string') out = JSON.parse(out);
       } catch (e) { throw new Error('The CRM function returned an answer that could not be read. Check in CRM whether the lead was converted.'); }
       if (String(out.ok) !== 'true') throw new Error(out.error || 'The CRM function reported an error.');
-      return { dealId: out.deal_id || '', accountId: out.account_id || '', contactId: out.contact_id || '' };
+      return { dealId: out.deal_id || '', accountId: out.account_id || '', contactId: out.contact_id || '', roleSet: String(out.role_set) !== 'false' };
     },
+    // The temperature as it is now in CRM
+    temperature: v => one('Leads', v.contact.id).then(r => r[C.ai.temperatureField] || ''),
     // Runs the CRM function that calls OpenAI. The API key stays in CRM and never reaches this page.
     async summarize(v) {
       let timer;
@@ -282,7 +333,7 @@
           if (typeof out === 'string') out = JSON.parse(out);
         } catch (e) { throw new Error('The CRM function returned an answer that could not be read.'); }
         if (String(out.ok) !== 'true') throw new Error(out.error || 'The CRM function reported an error.');
-        try { return typeof out.text === 'string' ? JSON.parse(out.text) : out.text; } catch (e) { throw new Error('The AI answer could not be read. Please try again.'); }
+        try { return { ...(typeof out.text === 'string' ? JSON.parse(out.text) : out.text), temperature: out.temperature || null }; } catch (e) { throw new Error('The AI answer could not be read. Please try again.'); }
       } catch (e) {
         throw e instanceof Error ? e : new Error(`The CRM function ${C.ai.functionName} could not be run. ${why(e)}`);
       } finally { clearTimeout(timer); }

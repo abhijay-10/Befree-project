@@ -39,9 +39,9 @@
   function header() {
     const d = V.deal;
     const lost = R.isLost(d.stage) ? ' ' + pill(d.stage, 'bad') : R.isWon(d.stage) ? ' ' + pill(d.stage, 'good') : '';
-    return `<header class="band"><div class="avatar" aria-hidden="true">${icon('deal')}</div><div class="who"><h1>${esc(d.name)}${lost}</h1>
+    return `<header class="ticket"><div class="who"><h1>${esc(d.name)}${lost}</h1>
       <p>${d.accountName ? link('Accounts', d.accountId, d.accountName) : 'No account'}<span class="sep"></span>${d.contactName ? link('Contacts', d.contactId, d.contactName) : 'No contact'}</p></div>
-      <dl><div><dt>Amount</dt><dd>${money(d.amount)}</dd></div><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
+      <dl class="stub"><div><dt>Amount</dt><dd>${money(R.amounts(d).total)}</dd></div></dl><dl class="strip"><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
       <div><dt>Service</dt><dd>${esc(d.services.join(', ') || 'Not chosen')}</dd></div><div><dt>Probability</dt><dd>${d.prob === null ? 'Not set' : d.prob + '%'}</dd></div></dl></header>`;
   }
   function stageBar() {
@@ -49,7 +49,7 @@
     const shown = path.map((s, i) => {
       const b = R.befreeStage(s), done = won ? i <= at : at >= 0 && i < at, now = !won && i === at;
       const note = now ? 'Current' + (d.prob === null ? '' : ', ' + d.prob + '%') : b ? b.prob + '%' : '';
-      return `<li class="${done ? 'done' : now ? 'next' : ''}"><span class="dot">${done ? icon('tick') : i + 1}</span><b>${esc(s)}</b><small>${note}</small></li>`;
+      return `<li class="${done ? 'done' : now ? 'next' : ''}"><span class="dot">${done ? icon('tick') : i + 1}</span><b>${esc(s).split('/').join('/<wbr>')}</b><small>${note}</small></li>`;
     }).join('');
     const off = V.stagesKnown && at < 0 && !lost ? `<p class="hint">The stage "${esc(d.stage || 'None')}" is not in the CRM stage list.</p>` : '';
     return `<ol class="journey ${lost ? 'lost' : ''}" style="--n:${path.length}" aria-label="Deal stages">${shown}</ol>${off}`;
@@ -103,8 +103,9 @@
 
   /* ---------- top cards ---------- */
   function amountBlock() {
-    const d = V.deal;
-    return block('Amount', 'money', `<p class="big">${money(d.amount)}</p><p>Expected revenue ${money(d.expected)}</p><p class="mute">${d.prob === null ? 'Probability not set' : 'At ' + d.prob + '% probability'}</p>`);
+    const d = V.deal, a = R.amounts(d), n = a.list.length;
+    const from = a.used ? `<p>${a.set < n ? 'Amount set for ' + a.set + ' of ' + n + ' services' : n === 1 ? 'Amount of 1 service' : 'Total of ' + n + ' services'}</p>` : '';
+    return block('Amount', 'money', `<p class="big">${money(a.total)}</p>${from}<p>Expected revenue ${money(a.expected)}</p><p class="mute">${d.prob === null ? 'Probability not set' : 'At ' + d.prob + '% probability'}</p>`);
   }
   function closeBlock() {
     const d = V.deal, closed = R.isClosed(d.stage), n = d.closeDate ? R.daysBetween(V.now, d.closeDate) : null, p = R.pushes(d);
@@ -134,16 +135,16 @@
     const note = (x, i) => i === 3 && x.state === 'done' ? 'Closing date ' + date(V.deal.timeline) : x.note;
     return `<section><div class="svc-head"><h2>${icon('shield')}Qualification</h2><p class="mute">${n} of 5 complete</p></div>
       <div class="meter" aria-hidden="true">${g.map(x => `<i class="${x.state}"></i>`).join('')}</div>
-      <ul class="gate">${g.map((x, i) => `<li class="${x.state}"><span class="mark">${icon({ done: 'tick', missing: 'cross', unknown: 'dash' }[x.state])}</span><span><b>${x.label}</b><small>${esc(note(x, i))}</small></span><em>${text[x.state]}</em></li>`).join('')}</ul></section>`;
+      <ol class="gate steps">${g.map((x, i) => `<li class="${x.state}"><span class="mark">${icon({ done: 'tick', missing: 'cross', unknown: 'dash' }[x.state])}</span><span><b>${x.label}</b><small>${esc(note(x, i))}</small></span><em>${text[x.state]}</em></li>`).join('')}</ol></section>`;
   }
   function historyBlock() {
     const d = V.deal;
     if (!d.history) return block('Stage history', 'clock', `<p class="mute">Stage history is not available. ${esc(V.problems.history || '')}</p>`);
     const all = d.history.slice().sort((a, b) => R.toDate(b.at) - R.toDate(a.at)).slice(0, 8);
     const cls = s => R.isWon(s) ? 'meet' : R.isLost(s) ? 'high' : '';
-    const items = all.map(h => `<li class="${cls(h.stage)}"><time>${date(h.at)}</time><b>${esc(h.stage)}</b><span>${h.closeDate ? 'Close ' + date(h.closeDate) : ''}</span><span class="mute">${esc(h.by)}</span></li>`);
-    if (d.created) items.push(`<li><time>${date(d.created)}</time><b>Deal created</b><span></span><span class="mute">${esc(d.createdBy)}</span></li>`);
-    return block('Stage history', 'clock', items.length ? `<ul class="timeline">${items.join('')}</ul>` : '<p class="mute">No stage changes yet.</p>');
+    const items = all.map(h => `<tr class="${cls(h.stage)}"><td><time>${date(h.at)}</time></td><td><b>${esc(h.stage)}</b></td><td>${h.closeDate ? 'Close ' + date(h.closeDate) : ''}</td><td class="mute">${esc(h.by)}</td></tr>`);
+    if (d.created) items.push(`<tr><td><time>${date(d.created)}</time></td><td><b>Deal created</b></td><td></td><td class="mute">${esc(d.createdBy)}</td></tr>`);
+    return block('Stage history', 'clock', items.length ? `<table class="ledger" aria-label="Stage history"><tbody>${items.join('')}</tbody></table>` : '<p class="mute">No stage changes yet.</p>');
   }
   const allDeals = () => db.live ? ui.list : db.list(ui.user);
   // Services asked for in the website enquiry, used only while the deal has none saved
@@ -155,8 +156,9 @@
     const head = text => `<div class="svc-head"><h2>${icon('tag')}Services</h2><p class="mute">${text}</p></div>`;
     if (!V.service.field) return `<section>${head('')}<p class="note bad">The field ${esc(C.deal.service)} was not found in Deals. Check its API name and that your profile can see it.</p></section>`;
     if (!list.length) return `<section>${head('')}<p class="mute">No service chosen for this deal yet.</p></section>`;
+    const price = Object.fromEntries(R.amounts(V.deal).list.map(x => [x.name, x.amount]));
     const row = x => now.length
-      ? `<li class="done"><span class="mark">${icon('tick')}</span><span><b>${esc(x)}</b></span><em>Chosen</em></li>`
+      ? `<li class="done"><span class="mark">${icon('tick')}</span><span><b>${esc(x)}</b></span><em class="${price[x] === null ? 'unset' : 'price'}">${price[x] === null ? 'Amount not set' : money(price[x])}</em></li>`
       : `<li class="unknown"><span class="mark">${icon('dash')}</span><span><b>${esc(x)}</b></span><em>Requested, not saved</em></li>`;
     return `<section>${head(`${list.length} ${list.length === 1 ? 'service' : 'services'} ${now.length ? 'on this deal' : 'in the website enquiry'}`)}<ul class="gate">${list.map(row).join('')}</ul></section>`;
   }
@@ -216,7 +218,7 @@
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
     if ($('#items').dataset.key !== key) {
       $('#items').dataset.key = key;
-      $('#items').innerHTML = view.map(c => `<button data-deal="${esc(c.id)}"><span class="face" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span></button>`).join('') || '<p class="mute">No deals match.</p>';
+      $('#items').innerHTML = view.map(c => `<button data-deal="${esc(c.id)}" data-sub="${esc(c.sub)}"><span class="face" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span></button>`).join('') || '<p class="mute">No deals match.</p>';
       if (shown.length > view.length) $('#items').insertAdjacentHTML('beforeend', '<p class="mute">Showing 200. Search to find others.</p>');
     }
     $('#items').querySelectorAll('button').forEach(b => b.setAttribute('aria-current', b.dataset.deal === ui.id ? 'true' : 'false'));

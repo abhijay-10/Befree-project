@@ -8,7 +8,10 @@ window.Data = (function () {
   "use strict";
 
   const CODES = ["US", "UK", "AU"];
-  const RANGE_DAYS = { "7d": 7, "30d": 30, "90d": 90, "12m": 365 };
+  // Records without a US, UK or AU country ("Country not set"). Part of All countries, and a filter of its own.
+  const OTHER_COUNTRY = "Other";
+  // null = All time (no start date).
+  const RANGE_DAYS = { "7d": 7, "30d": 30, "90d": 90, "12m": 365, "all": null };
 
   // `label` is the long tile name; `name` is the Service_Line value on a deal.
   const SERVICES = [
@@ -21,8 +24,18 @@ window.Data = (function () {
     { key: "mortgage",     label: "Mortgage Services",      name: "Mortgage Support", color: "#8D9FC9" },
     { key: "virtualadmin", label: "Virtual Admin Services", name: "Virtual Admin",    color: "#7C5CE0" }
   ];
-  const OTHER = { key: "other", label: "Other services", name: "Other", color: "#C4C9D4" };
+  const OTHER = { key: "other", label: "No service / other", name: "No service", color: "#C4C9D4" };
+  // Amount of each service on a deal (Deals fields, as used by the Deals widget). Same currency as Amount.
+  const SERVICE_AMOUNT_FIELDS = {
+    accounting: "Accounting_Services_Amount", bookkeeping: "Bookkeeping_Services_Amount", payroll: "Payroll_Services_Amount",
+    tax: "Tax_Services_Amount", audit: "Audit_Support_Services_Amount", paraplanning: "Paraplanning_Services_Amount",
+    mortgage: "Mortgage_Services_Amount", virtualadmin: "Virtual_Admin_Services_Amount"
+  };
 
+  // The two choices of the cards with a Won / Won + Open switch.
+  const OPTIONS = { won: "Won only", wonOpen: "Won + Open" };
+
+  // Replaced by the Deals stages of this CRM as soon as they are read (see setStages).
   const STAGES = [
     { name: "Qualified", prob: 10 },
     { name: "Needs confirmed", prob: 25 },
@@ -34,7 +47,25 @@ window.Data = (function () {
   const WON = "Closed-won";
   const LOST = "Closed-lost";
 
-  const CHANNELS = ["Email", "Webinars", "Events", "LinkedIn Organic", "LinkedIn Ads", "Google Ads", "Website", "Social Media"];
+  /*
+   * The one deal rule, decided by stage name (never by the editable Probability field):
+   * Confirmed = Closed-won. Unconfirmed = an open stage, put in one of these buckets. Lost = neither.
+   * An open stage missing from STAGE_BUCKET is still unconfirmed and shows as "Not mapped".
+   */
+  const BUCKETS = [10, 25, 50, 75, 90];
+  const BUCKET_NAMES = { 10: "Qualified", 25: "Needs confirmed", 50: "Proposal presented", 75: "Agreement sent", 90: "Verbal commitment" };
+  // Keys are stage names without spaces, capitals or punctuation. TODO: confirm the bucket of each CRM stage.
+  const STAGE_BUCKET = {
+    qualified: 10, qualification: 10,
+    needsconfirmed: 25, needsanalysis: 25,
+    proposalpresented: 50, valueproposition: 50, iddecisionmakers: 50, identifydecisionmakers: 50,
+    agreementsent: 75, proposalpricequote: 75,
+    verbalcommitment: 90, negotiationreview: 90
+  };
+
+  // Last entry collects confirmed amounts whose source matches no channel, so the channels add up to the total.
+  const OTHER_CHANNEL = "Other / not set";
+  const CHANNELS = ["Email", "Webinars", "Events", "LinkedIn Organic", "LinkedIn Ads", "Google Ads", "Website", "Social Media", OTHER_CHANNEL];
 
   /* ================= Helpers ================= */
 
@@ -57,8 +88,9 @@ window.Data = (function () {
   }
 
   /*
-   * The one service-line aggregation. Takes service lists ([{key, value, deals}]) and returns
-   * one row per service with its total value and deal count.
+   * The one service-line aggregation. Takes service lists ([{key, value, deals, dealCount}]) and returns
+   * one row per service. `deals` is the deal share (1/n for a deal with n services), so the shares add up
+   * to the number of deals; `dealCount` is how many deals include the service.
    */
   function serviceTotals(lists) {
     const rows = lists.flat();
@@ -68,7 +100,8 @@ window.Data = (function () {
       return {
         key: s.key, label: s.label, name: s.name, color: s.color,
         value: sum(mine, function (r) { return r.value; }),
-        deals: sum(mine, function (r) { return r.deals; })
+        deals: sum(mine, function (r) { return r.deals; }),
+        dealCount: sum(mine, function (r) { return r.dealCount; })
       };
     });
   }
@@ -108,23 +141,141 @@ window.Data = (function () {
     return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
   }
 
-  function attainment(target, closedWon, forecast) {
+  // Actual (confirmed this quarter) against target. Open deals are not added.
+  function attainment(target, closedWon) {
     return {
       target: target,
       closedWon: closedWon,
-      forecast: forecast,
-      gap: Math.max(0, target - closedWon - forecast),
-      pct: target ? (closedWon + forecast) / target * 100 : null
+      gap: Math.max(0, (target || 0) - closedWon),
+      pct: target ? closedWon / target * 100 : null
     };
   }
 
   function forecastVsTarget(raws) {
     const t = function (key) { return add(raws.map(function (r) { return r[key]; })); };
-    const total = attainment(t("target"), t("closedWonQuarter"), t("forecast"));
+    const total = attainment(t("target"), t("closedWonQuarter"));
     total.byCountry = raws.map(function (r) {
-      return Object.assign({ country: r.code }, attainment(r.target, r.closedWonQuarter, r.forecast));
+      return Object.assign({ country: r.code }, attainment(r.target, r.closedWonQuarter));
     });
     return total;
+  }
+
+  // Splits an amount into n parts, to the paisa, that add up exactly to the amount.
+  function splitAmount(amount, n) {
+    const paise = Math.round(amount * 100);
+    const base = Math.floor(paise / n);
+    const rest = paise - base * n;
+    return Array.from({ length: n }, function (_, i) { return (base + (i < rest ? 1 : 0)) / 100; });
+  }
+
+  /*
+   * How one deal's amount is shared between its services (worked out once per deal, in toDeal):
+   * the per-service amount fields when every service has one and they add up exactly to Amount;
+   * otherwise Amount split equally. Either way the parts add up exactly to the deal amount.
+   */
+  const paise = function (v) { return Math.round(v * 100); };
+  function fitsAmount(given, rawAmount) {
+    return given.every(function (v) { return v !== null; }) &&
+      paise(given.reduce(function (t, v) { return t + v; }, 0)) === paise(rawAmount);
+  }
+  // Converts each part to ₹ to the paisa; any rounding difference goes to the largest part, so they add up to `total`.
+  function convertParts(given, total, home) {
+    const parts = given.map(function (v) { return paise(home(v)); });
+    const diff = paise(total) - parts.reduce(function (t, v) { return t + v; }, 0);
+    let big = 0;
+    parts.forEach(function (v, i) { if (v > parts[big]) big = i; });
+    parts[big] += diff;
+    return parts.map(function (v) { return v / 100; });
+  }
+
+  // A deal's share of each service; in deal counts it is 1/n per service, so a deal counts once in total.
+  function serviceParts(deals) {
+    const out = [];
+    deals.forEach(function (d) {
+      d.serviceKeys.forEach(function (k, i) {
+        out.push({ key: k, value: d.parts[i], deals: 1 / d.serviceKeys.length, dealCount: 1 });
+      });
+    });
+    return out;
+  }
+
+  /* ================= The one selection rule ================= */
+
+  // Start of the selected period: "last N days" = today and the N-1 days before it, from local midnight.
+  // All time has no start.
+  function periodStart(range, now) {
+    if (!(range in RANGE_DAYS)) throw new Error("Unknown date range: " + range);
+    const days = RANGE_DAYS[range];
+    if (days === null) return null;
+    const d = now || new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (days - 1));
+  }
+
+  function inCountry(deal, country) {
+    if (!country || country === "ALL") return true;
+    return country === OTHER_COUNTRY ? !deal.country : deal.country === country;
+  }
+
+  /*
+   * Every card chooses its deals here, so the same filters always give the same numbers.
+   * opts.country: ALL, US, UK, AU or Other. opts.from: period start (null = all time).
+   * opts.option: "won" = Closed-won with a Closing Date in the period;
+   *              "open" = open deals today (10% to 90%), never hidden by the date filter;
+   *              "wonOpen" = both. Lost deals are never included, and each deal appears once.
+   */
+  function pickDeals(deals, opts) {
+    const mine = deals.filter(function (d) { return inCountry(d, opts.country); });
+    const won = mine.filter(function (d) {
+      return d.group === "confirmed" && d.closedOn && (!opts.from || within(d.closedOn, opts.from));
+    });
+    const open = mine.filter(function (d) { return d.group === "unconfirmed"; });
+    if (opts.option === "won") return won;
+    if (opts.option === "open") return open;
+    if (opts.option === "wonOpen") return won.concat(open);
+    throw new Error("Unknown option: " + opts.option);
+  }
+
+  // Figures of one option for the switch cards: total, per country, per service, sourced and influenced.
+  function optionBlock(list, codes, influenceKnown) {
+    const amount = function (l) { return sum(l, function (d) { return d.amount; }); };
+    return {
+      count: list.length,
+      amount: amount(list),
+      byCountry: codes.map(function (c) {
+        return { label: c, value: amount(list.filter(function (d) { return inCountry(d, c); })) };
+      }),
+      services: serviceTotals([serviceParts(list)]),
+      // Marketing channels only; deals under "Other / not set" are not marketing-sourced.
+      sourced: amount(list.filter(function (d) { return d.source !== OTHER_CHANNEL; })),
+      // A deal with several engaged channels counts once.
+      influenced: influenceKnown ? amount(list.filter(function (d) { return d.channels.length > 0; })) : null
+    };
+  }
+
+  function stageBucket(stage) {
+    const b = STAGE_BUCKET[norm(stage)];
+    return b === undefined ? null : b;
+  }
+  function dealGroup(stage) {
+    return stage === WON ? "confirmed" : stage === LOST ? "lost" : "unconfirmed";
+  }
+
+  // Unconfirmed deals per bucket; "none" holds open stages that are not mapped.
+  function bucketTotals(deals) {
+    const out = {};
+    BUCKETS.concat("none").forEach(function (b) { out[b] = { count: 0, amount: 0, stages: [] }; });
+    deals.forEach(function (d) {
+      const row = out[d.bucket === null ? "none" : d.bucket];
+      row.count++;
+      row.amount += d.amount;
+      if (row.stages.indexOf(d.stage) === -1) row.stages.push(d.stage);
+    });
+    return out;
+  }
+
+  // Local calendar date as YYYY-MM-DD (toISOString would give the UTC date).
+  function localDay(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
   // Counts come from the same funnel as the Overview; days are weighted by count.
@@ -212,9 +363,9 @@ window.Data = (function () {
     return Math.floor((new Date(to + "T00:00:00Z") - new Date(from + "T00:00:00Z")) / 864e5);
   };
 
-  // Open deals matching any rule; the most severe reason leads (overdue, stuck, no activity).
+  // Unconfirmed deals matching any rule, each listed once; the most severe reason leads (overdue, stuck, no activity).
   function atRisk(deals, thresholdDays, asOf) {
-    const open = deals.filter(function (d) { return d.stage !== WON && d.stage !== LOST; });
+    const open = deals.filter(function (d) { return dealGroup(d.stage) === "unconfirmed"; });
     const rows = [];
     open.forEach(function (d) {
       const idle = d.lastActivityDate ? wholeDays(d.lastActivityDate, asOf) : null;
@@ -244,7 +395,55 @@ window.Data = (function () {
     const value = sum(rows, function (r) { return r.deal.amount; });
     // Both sides of the share come from the deals list, so it cannot exceed 100%.
     const openValue = sum(open, function (d) { return d.amount; });
-    return { rows: rows, count: rows.length, value: value, openCount: open.length, pct: openValue ? value / openValue * 100 : null };
+    return {
+      rows: rows, count: rows.length, value: value, openCount: open.length, pct: openValue ? value / openValue * 100 : null,
+      stageDatesKnown: open.some(function (d) { return d.stageEnteredDate; })
+    };
+  }
+
+  /* ================= Leads ================= */
+
+  function emptyLeads() {
+    return {
+      total: null, created: null, prevCreated: null, open: null, lost: null, moved: null, movedPeriod: null, otherConverted: null,
+      movedElsewhere: null, movedMissing: null,
+      byStatus: {}, months: lastMonths(6).map(function (m) { return { label: m.label, created: 0, moved: 0 }; })
+    };
+  }
+
+  // Sums the per-country lead figures.
+  function leadTotals(raws) {
+    const t = function (key) { return add(raws.map(function (r) { return r.leadStats[key]; })); };
+    const byStatus = {};
+    raws.forEach(function (r) {
+      Object.keys(r.leadStats.byStatus).forEach(function (k) { byStatus[k] = (byStatus[k] || 0) + r.leadStats.byStatus[k]; });
+    });
+    const total = t("total"), moved = t("moved"), created = t("created");
+    return {
+      total: total, created: created, open: t("open"), lost: t("lost"), moved: moved, movedPeriod: t("movedPeriod"), otherConverted: t("otherConverted"),
+      movedElsewhere: t("movedElsewhere"), movedMissing: t("movedMissing"),
+      createdDelta: change(created, t("prevCreated")),
+      rate: total === null || moved === null || !total ? null : moved / total * 100,
+      byStatus: Object.keys(byStatus).map(function (k) { return { label: k, count: byStatus[k] }; })
+        .sort(function (a, b) { return b.count - a.count || a.label.localeCompare(b.label); }),
+      months: raws[0].leadStats.months.map(function (m, i) {
+        return {
+          label: m.label,
+          created: raws.reduce(function (x, r) { return x + r.leadStats.months[i].created; }, 0),
+          moved: raws.reduce(function (x, r) { return x + r.leadStats.months[i].moved; }, 0)
+        };
+      })
+    };
+  }
+
+  // One row of the country comparison.
+  function countryRow(r) {
+    const won = sum(r.months, function (m) { return m.won; }), lost = sum(r.months, function (m) { return m.lost; });
+    return {
+      code: r.code, created: r.leadStats.created, open: r.leadStats.open, moved: r.leadStats.moved,
+      confirmedDeals: r.confirmedCount, confirmedAmount: r.confirmedAmount,
+      won: won, lost: lost, winRate: won + lost ? won / (won + lost) * 100 : null
+    };
   }
 
   /* ================= Aggregation ================= */
@@ -256,17 +455,29 @@ window.Data = (function () {
     const m = function (key) { return total(function (r) { return r.marketing[key]; }); };
     const p = function (key) { return total(function (r) { return r.previous[key]; }); };
 
-    const pipeline = total(function (r) { return r.pipeline; });
-    const forecast = total(function (r) { return r.forecast; });
-    const openDeals = total(function (r) { return r.openDeals; });
-    const influenced = total(function (r) { return r.influenced; });
+    // The switch cards (Won only / Won + Open), all chosen by pickDeals from the deals of the selected countries.
+    const deals = raws.reduce(function (all, r) { return all.concat(r.deals); }, []);
+    const from = periodStart(state.range);
+    const influenceKnown = raws.every(function (r) { return r.influenced !== null; });
+    const codes = raws.map(function (r) { return r.code; });
+    const options = {};
+    ["won", "open", "wonOpen"].forEach(function (o) {
+      options[o] = optionBlock(pickDeals(deals, { from: from, option: o }), codes, influenceKnown);
+    });
+
+    const influenced = options.won.influenced; // counted once per deal
+
+    const confirmedAmount = total(function (r) { return r.confirmedAmount; });
+    const confirmedCount = total(function (r) { return r.confirmedCount; });
+    const unconfirmedAmount = total(function (r) { return r.unconfirmedAmount; });
+    const unconfirmedCount = total(function (r) { return r.unconfirmedCount; });
+    const weighted = total(function (r) { return r.weighted; });
     const newAccounts = total(function (r) { return r.newAccounts; });
     const won = total(function (r) { return r.win.won; });
     const closed = total(function (r) { return r.win.closed; });
     const winRate = closed ? won / closed * 100 : null;
     const prevWon = total(function (r) { return r.previous.win && r.previous.win.won; });
     const prevClosed = total(function (r) { return r.previous.win && r.previous.win.closed; });
-    const prevOpen = p("openDeals");
 
     // Element-wise sum of a sparkline across countries; empty when any country lacks it.
     function series(key) {
@@ -282,22 +493,22 @@ window.Data = (function () {
     }).filter(function (v) { return v !== null; });
 
     const delta = {
-      pipeline: change(pipeline, p("pipeline"), 1),
-      forecast: change(forecast, p("forecast"), 1),
-      openDeals: prevOpen === null ? undefined : signed(openDeals - prevOpen, 0, ""),
       winRate: winRate !== null && prevClosed ? signed(winRate - prevWon / prevClosed * 100, 1) : undefined,
       newAccounts: change(newAccounts, p("newAccounts")),
       influenced: change(influenced, p("influenced"))
     };
 
-    const sourced = m("sourced");
+    const sourced = options.won.sourced;
     const leads = m("leads"), mql = m("mql"), sql = m("sql"), spend = m("spend");
     const prevLeads = p("leads"), prevMql = p("mql"), prevSql = p("sql"), prevSpend = p("spend");
     const mqlRate = ratio(sql, mql);
     const costPerLead = ratio(spend, leads);
+    // Won only: marketing-sourced won revenue (Closing Date in the period) ÷ spend of campaigns started in the
+    // same period. null ("Not available") when there is no spend.
     const roi = ratio(sourced, spend);
 
     const marketingKpis = {
+      spend: spend,
       influenced: influenced,
       sourcedRevenue: sourced,
       webinar: flow(m("webinar")),
@@ -329,9 +540,14 @@ window.Data = (function () {
       return { label: s[0], count: flow(value), conversion: rate === null ? null : rate * 100 };
     });
 
-    const byStage = {};
+    const byBucket = {};
     raws.forEach(function (r) {
-      Object.keys(r.byStage).forEach(function (k) { byStage[k] = (byStage[k] || 0) + r.byStage[k]; });
+      Object.keys(r.byBucket).forEach(function (k) {
+        const row = byBucket[k] = byBucket[k] || { count: 0, amount: 0, stages: [] };
+        row.count += r.byBucket[k].count;
+        row.amount += r.byBucket[k].amount;
+        r.byBucket[k].stages.forEach(function (s) { if (row.stages.indexOf(s) === -1) row.stages.push(s); });
+      });
     });
 
     const temperature = {};
@@ -341,7 +557,6 @@ window.Data = (function () {
 
     const services = serviceTotals(raws.map(function (r) { return r.services; }));
     const accounts = total(function (r) { return r.accounts; });
-    const deals = raws.reduce(function (all, r) { return all.concat(r.deals); }, []);
 
     const funnel = STAGES.map(function (s, i) { return raws.reduce(function (t, r) { return t + r.funnel[i]; }, 0); });
 
@@ -349,42 +564,39 @@ window.Data = (function () {
       source: source,
       unavailable: source === "empty" && App.isEmbedded, // flagged only inside CRM
       asOf: raws[0].asOf,
+      leads: leadTotals(raws),
       forecastVsTarget: forecastVsTarget(raws),
       stageConversion: stageConversion(funnel, raws),
       response: responseStats(raws, raws[0].months.map(function (m) { return m.label; })),
       channelTrend: channelTrend(raws, state.range),
       team: state.country === "ALL" || !raws.length ? null : { bdm: raws[0].bdm, bde: raws[0].bde },
       accounts: accounts,
-      dealCount: deals.length,
       kpis: {
-        pipelineValue: pipeline,
-        forecast: forecast,
-        openDeals: openDeals,
+        confirmedAmount: confirmedAmount,
+        confirmedCount: confirmedCount,
+        unconfirmedAmount: unconfirmedAmount,
+        unconfirmedCount: unconfirmedCount,
+        weighted: weighted,
         winRate: winRate,
         newAccounts: flow(newAccounts),
         influenced: influenced,
         delta: delta,
-        spark: {
-          pipeline: series("pipeline"), forecast: series("forecast"), openDeals: series("openDeals"),
-          winRate: winSpark, newAccounts: series("newAccounts"), influenced: series("influenced")
-        }
+        spark: { winRate: winSpark, newAccounts: series("newAccounts") }
       },
+      byBucket: byBucket,
       services: services,
       servicesByCountry: raws.map(function (r) {
-        return { country: r.code, total: r.pipeline, services: serviceTotals([r.services]) };
+        return { country: r.code, total: r.confirmedAmount, count: r.confirmedCount, services: serviceTotals([r.services]) };
       }),
       funnel: funnel,
-      pipelineByStage: byStage,
-      pipelineByServiceLine: services.filter(function (s) { return s.value > 0; })
-        .map(function (s) { return { label: s.name, value: s.value }; })
-        .sort(function (a, b) { return b.value - a.value; }),
-      pipelineByCountry: raws.map(function (r) { return { label: r.code, value: r.pipeline }; })
-        .sort(function (a, b) { return b.value - a.value; }),
+      options: options,
+      periodFrom: from,
       wonLost: raws[0].months.map(function (month, i) {
         return {
           label: month.label,
           won: raws.reduce(function (t, r) { return t + r.months[i].won; }, 0),
-          lost: raws.reduce(function (t, r) { return t + r.months[i].lost; }, 0)
+          lost: raws.reduce(function (t, r) { return t + r.months[i].lost; }, 0),
+          lostValue: raws.reduce(function (t, r) { return t + r.months[i].lostValue; }, 0)
         };
       }),
       revenueTrend: raws[0].months.map(function (month, i) {
@@ -402,11 +614,12 @@ window.Data = (function () {
       leadFunnel: leadFunnel,
       campaigns: raws.reduce(function (all, r) { return all.concat(r.campaigns); }, []).map(function (c) {
         return {
-          name: c.name, channel: c.channel, status: c.status, pipeline: c.pipeline,
-          spend: c.spend, leads: flow(c.leads), roi: ratio(c.revenue, c.spend)
+          name: c.name, channel: c.channel, status: c.status, confirmed: c.confirmed,
+          spend: c.spend, leads: flow(c.leads), roi: ratio(c.confirmed, c.spend)
         };
       }),
-      deals: deals,
+      deals: deals, // every deal, for the at-risk rules
+      confirmedDeals: raws.reduce(function (all, r) { return all.concat(r.confirmedDeals); }, []),
       recentActivity: raws.reduce(function (all, r) { return all.concat(r.activity); }, [])
         .sort(function (a, b) { return a.ageHours - b.ageHours; }).slice(0, 4)
     };
@@ -418,15 +631,17 @@ window.Data = (function () {
     const zeros = function (n) { return Array.from({ length: n }, function () { return 0; }); };
     const channelZeros = function () { return CHANNELS.map(function () { return zeros(12); }); };
     return {
-      code: code, bdm: "", bde: "", asOf: new Date().toISOString().slice(0, 10),
-      accounts: 0, pipeline: 0, forecast: 0, openDeals: 0, byStage: {}, funnel: zeros(STAGES.length), services: [],
+      code: code, bdm: "", bde: "", asOf: localDay(new Date()),
+      accounts: 0, confirmedAmount: 0, confirmedCount: 0, unconfirmedAmount: 0, unconfirmedCount: 0, weighted: 0,
+      byBucket: bucketTotals([]), funnel: zeros(STAGES.length), services: [], confirmedDeals: [],
       win: { won: 0, closed: 0 }, newAccounts: 0, influenced: 0, target: 0, closedWonQuarter: 0,
-      months: months.slice(6).map(function (m) { return { label: m.label, won: 0, lost: 0, revenue: 0 }; }),
+      months: months.slice(6).map(function (m) { return { label: m.label, won: 0, lost: 0, revenue: 0, lostValue: 0 }; }),
+      leadStats: emptyLeads(),
       monthLabels12: months.map(function (m) { return m.label; }),
       temperature: {},
       attribution: CHANNELS.map(function (c) { return { channel: c, sourced: 0, influenced: 0 }; }),
       marketing: { sourced: 0, webinar: 0, events: 0, linkedin: 0, enquiries: 0, leads: 0, mql: 0, sql: 0, opportunities: 0, won: 0, spend: 0 },
-      previous: { pipeline: null, forecast: null, openDeals: null, win: { won: 0, closed: 0 }, newAccounts: null,
+      previous: { win: { won: 0, closed: 0 }, newAccounts: null,
                   influenced: null, sourced: null, webinar: null, events: null, linkedin: null, enquiries: null,
                   leads: null, mql: null, sql: null, spend: null },
       spark: { win: [], newAccounts: [] },
@@ -442,43 +657,35 @@ window.Data = (function () {
     return build(codes.map(emptyRaw), state, "empty");
   }
 
-  /* ================= Live data (Zoho COQL) ================= */
+  /* ================= Live data (Zoho CRM) ================= */
 
-  // TODO: confirm every module and field API name below (Setup > Developer Space > APIs).
+  // Records are read whole, so a field that does not exist in this CRM is simply empty.
   const FIELDS = {
-    deal: {
-      name: "Deal_Name", stage: "Stage", amount: "Amount", close: "Closing_Date", created: "Created_Time",
-      probability: "Probability", owner: "Owner.first_name", accountName: "Account_Name.Account_Name",
-      accountId: "Account_Name.id", contactFirst: "Contact_Name.First_Name", contactLast: "Contact_Name.Last_Name",
-      contactId: "Contact_Name.id", leadSource: "Lead_Source", campaignId: "Campaign_Source.id",
-      country: "Country",      // TODO: custom field
-      service: "Service_Line", // TODO: custom field
-      bde: "BDE"               // TODO: custom field; remove if you don't have it
-    },
-    account: { country: "Billing_Country", created: "Created_Time", temperature: "Temperature" /* TODO: custom */ },
-    contact: {
-      country: "Mailing_Country", rating: "Rating", // TODO: Rating is a custom Hot / Warm / Cold field
-      engaged: "Last_Engaged_Date", channels: "Engaged_Channels" // TODO: custom fields
-    },
+    account: { created: "Created_Time" },
+    contact: { engaged: "Last_Engaged_Date", channels: "Engaged_Channels" }, // custom
     campaign: {
       name: "Campaign_Name", type: "Type", status: "Status", start: "Start_Date", spend: "Actual_Cost",
-      country: "Country", leads: "Leads_Count", webinar: "Attendees", events: "Participants",
-      linkedin: "Engagements" // TODO: all but Campaign_Name, Type, Status, Start_Date, Actual_Cost are custom
+      leads: "Leads_Count", webinar: "Attendees", events: "Participants", linkedin: "Engagements" // custom
     },
-    lead: { source: "Lead_Source", status: "Lead_Status", created: "Created_Time", country: "Country" }
+    lead: { source: "Lead_Source", status: "Lead_Status", created: "Created_Time", temperature: "Lead_Temperature", optedOut: "Email_Opt_Out" }
   };
+  const SERVICE_FIELD = "Services_List";
+  // Lead_Status values of a lead that is closed without a deal.
+  const LOST_LEAD = /junk|lost|not qualified|unqualified|dead/i;
+  // Saved by the AI summary in the Leads widget. An opted-out lead is never Hot or Warm.
+  const TEMPERATURES = ["Hot", "Warm", "Cold", "Not enough data"];
+  function temperatureOf(lead) {
+    const t = lead[FIELDS.lead.temperature];
+    if (TEMPERATURES.indexOf(t) === -1) return null;
+    return lead[FIELDS.lead.optedOut] === true ? "Cold" : t;
+  }
 
   // TODO: match these to your picklist values.
   const COUNTRY_VALUES = {
-    US: ["US", "USA", "United States"],
-    UK: ["UK", "GB", "United Kingdom"],
-    AU: ["AU", "Australia"]
+    US: ["US", "USA", "U.S.", "U.S.A.", "United States", "United States of America"],
+    UK: ["UK", "GB", "U.K.", "United Kingdom", "Great Britain", "England", "Scotland", "Wales", "Northern Ireland"],
+    AU: ["AU", "AUS", "Australia"]
   };
-  const STAGE_ALIASES = {
-    "qualification": "Qualified", "needs analysis": "Needs confirmed", "proposal/price quote": "Proposal presented",
-    "closed won": WON, "closed lost": LOST, "closed-lost to competition": LOST, "closed lost to competition": LOST
-  };
-  const CLOSED_VALUES = ["Closed Won", "Closed Lost", "Closed-won", "Closed-lost", "Closed Lost to Competition"];
   const CHANNEL_ALIASES = {
     "webinar": "Webinars", "event": "Events", "trade show": "Events", "conference": "Events",
     "linkedin": "LinkedIn Organic", "linkedin ad": "LinkedIn Ads", "google adwords": "Google Ads", "adwords": "Google Ads",
@@ -492,13 +699,35 @@ window.Data = (function () {
 
   // TODO: confirm API names for the added cards.
   const TARGETS = { module: "Sales_Targets", country: "Country", period: "Period", amount: "Target_Amount" };
-  const DEAL_AGES = { lastActivity: "Last_Activity_Time", stageEntered: "Stage_Entered_Date" }; // Stage_Entered_Date is custom
   const LEAD_RESPONSE = { owner: "Owner.first_name", activityModules: ["Calls", "Tasks"] }; // TODO: add emails if logged in a module
 
+  function norm(v) { return String(v || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+  // Closed stages always carry one name; open stages keep the name they have in CRM.
   function stageName(v) {
-    const key = String(v || "").trim().toLowerCase();
-    const known = STAGES.find(function (s) { return s.name.toLowerCase() === key; });
-    return known ? known.name : STAGE_ALIASES[key] || String(v || "");
+    const key = norm(v);
+    if (/^closedwon/.test(key)) return WON;
+    if (/lost/.test(key)) return LOST;
+    const known = STAGES.find(function (s) { return norm(s.name) === key; });
+    return known ? known.name : String(v || "").trim();
+  }
+
+  // Uses the Deals stages of this CRM, in their order, with Closed-won last. Lost stages are not steps.
+  // A stage's % comes from its bucket, never from a deal's Probability field.
+  function setStages(names) {
+    if (!names.length) return;
+    const open = names.filter(function (n) { const s = norm(n); return !/^closedwon/.test(s) && !/lost/.test(s); });
+    STAGES.splice.apply(STAGES, [0, STAGES.length].concat(open.map(function (n) {
+      return { name: n, prob: stageBucket(n) };
+    }), { name: WON, prob: 100 }));
+  }
+
+  // Adds open stages that deals use but the stage list lacks, before Closed-won.
+  function completeStages(deals) {
+    deals.filter(isOpen).forEach(function (deal) {
+      if (!deal.stage || STAGES.some(function (s) { return s.name === deal.stage; })) return;
+      STAGES.splice(STAGES.length - 1, 0, { name: deal.stage, prob: deal.bucket });
+    });
   }
   const isOpen = function (d) { return d.stage !== WON && d.stage !== LOST; };
   function channelName(v) {
@@ -518,10 +747,10 @@ window.Data = (function () {
     const d = dateOnly ? new Date(+dateOnly[1], +dateOnly[2] - 1, +dateOnly[3]) : new Date(v);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  function daysAgo(n) { return new Date(Date.now() - n * 864e5); }
+  // from null = no start (All time). A record without a date is never inside a dated period.
   function within(value, from, to) {
     const d = toDate(value);
-    return !!d && d >= from && d < (to || new Date(8.64e15));
+    return !!d && (!from || d >= from) && d < (to || new Date(8.64e15));
   }
   function lastMonths(n) {
     const now = new Date();
@@ -543,12 +772,11 @@ window.Data = (function () {
     const days = Math.floor(mins / 1440);
     return days === 1 ? "Yesterday" : days + " days ago";
   }
-  const quoted = function (list) { return list.map(function (v) { return "'" + v + "'"; }).join(", "); };
-
-  // COQL returns at most 200 rows per call.
+  // COQL returns at most 200 rows per call. Reads every page; if CRM refuses a page, the error is
+  // passed on so the figure shows as "could not be read" instead of a silently short list.
   async function query(select) {
     let rows = [];
-    for (let offset = 0; offset < 2000; offset += 200) {
+    for (let offset = 0; ; offset += 200) {
       const page = await App.coql(select + " limit " + offset + ", 200");
       rows = rows.concat(page);
       if (page.length < 200) break;
@@ -559,29 +787,111 @@ window.Data = (function () {
     return App.fetchWithFallback(function () { return query(select); }, null);
   };
 
+  const text = function (v) { return v && typeof v === "object" ? v.name || "" : v || ""; };
+  const idOf = function (v) { return v && typeof v === "object" ? v.id || null : v || null; };
+  const day = function (v) { return v ? String(v).slice(0, 10) : null; };
+
   function toDeal(r) {
-    const f = FIELDS.deal;
-    const stage = stageName(r[f.stage]);
-    const known = STAGES.find(function (s) { return s.name === stage; });
-    return {
+    const stage = stageName(r.Stage);
+    const services = [].concat(r[SERVICE_FIELD] || []).map(text).filter(function (s) { return s && s !== "-None-"; });
+    // Amounts are converted to the home currency (₹): Zoho's Exchange_Rate is foreign units per 1 home unit.
+    // A deal in another currency without a rate is not added anywhere and is reported instead.
+    const number = function (v) { return v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v); };
+    const rawAmount = number(r.Amount);
+    const rate = Number(r.Exchange_Rate);
+    const unconverted = !!text(r.Currency) && !(rate > 0);
+    const home = function (v) { return Math.round((rate > 0 ? v / rate : v) * 100) / 100; };
+    const amount = rawAmount === null || unconverted ? 0 : home(rawAmount);
+    const bucket = stageBucket(stage);
+    const group = dealGroup(stage);
+    const deal = {
       id: r.id,
-      accountId: r[f.accountId] || null,
-      contactId: r[f.contactId] || null,
-      campaignId: r[f.campaignId] || null,
-      name: r[f.name] || "(unnamed deal)",
-      account: r[f.accountName] || "",
-      contact: [r[f.contactFirst], r[f.contactLast]].filter(Boolean).join(" "),
-      country: countryCode(r[f.country]),
-      service: r[f.service] || "",
-      amount: Number(r[f.amount]) || 0, // assumes amounts are in ₹ (CRM base currency)
+      accountId: idOf(r.Account_Name),
+      contactId: idOf(r.Contact_Name),
+      campaignId: idOf(r.Campaign_Source),
+      name: r.Deal_Name || "(unnamed deal)",
+      account: text(r.Account_Name),
+      contact: text(r.Contact_Name),
+      country: null, // set by setCountries
+      service: services.join(", "),
+      serviceKeys: unique(services.map(serviceKey)),
+      amount: amount,
+      noAmount: rawAmount === null,
+      unconverted: unconverted,
+      currency: text(r.Currency),
       stage: stage,
-      probability: r[f.probability] != null ? Number(r[f.probability]) : known ? known.prob : 0,
-      owner: r[f.owner] || "",
-      bde: r[f.bde] || "",
-      leadSource: r[f.leadSource],
-      close: r[f.close] || "",
-      created: toDate(r[f.created])
+      group: group,
+      bucket: group === "unconfirmed" ? bucket : null,
+      // Stage %, not the editable Probability field. null for an open stage that is not mapped.
+      probability: group === "confirmed" ? 100 : group === "lost" ? 0 : bucket,
+      owner: text(r.Owner),
+      bde: text(r.BDE),
+      leadSource: r.Lead_Source,
+      close: r.Closing_Date || "",
+      created: toDate(r.Created_Time),
+      lastActivityDate: day(r.Last_Activity_Time || r.Modified_Time || r.Created_Time),
+      stageEnteredDate: day(r.Stage_Entered_Date || r.Stage_Modified_Time)
     };
+    if (!deal.serviceKeys.length) deal.serviceKeys = [OTHER.key];
+    // Per-service amounts are checked against Amount in the deal's own currency, then converted like Amount.
+    const given = deal.serviceKeys.map(function (k) { return SERVICE_AMOUNT_FIELDS[k] ? number(r[SERVICE_AMOUNT_FIELDS[k]]) : null; });
+    const anyGiven = given.some(function (v) { return v !== null; });
+    deal.serviceAmountsUsed = anyGiven && rawAmount !== null && !unconverted && fitsAmount(given, rawAmount);
+    // Set but not adding up to Amount: the Deals widget shows their sum, CRM reports show Amount.
+    deal.serviceMismatch = anyGiven && !deal.serviceAmountsUsed;
+    deal.parts = deal.serviceAmountsUsed ? convertParts(given, amount, home) : splitAmount(amount, deal.serviceKeys.length);
+    deal.source = OTHER_CHANNEL; // set by tagChannels
+    deal.channels = [];
+    // A closed deal is dated by its Closing Date, as CRM reports do. A closed deal whose Closing Date is
+    // still in the future was closed by today, so it counts as today.
+    const planned = toDate(deal.close);
+    const today = localDay(new Date());
+    deal.closedOn = isOpen(deal) || !planned ? null : deal.close > today ? today : deal.close;
+    return deal;
+  }
+
+  // The country codes of every record. Deals have no country of their own in CRM, so it comes from
+  // the account, then the contact, then the lead the deal was converted from, then its description.
+  function setCountries(rows, dealRows) {
+    const first = function (values) {
+      for (let i = 0; i < values.length; i++) {
+        const code = countryCode(values[i]);
+        if (code) return code;
+      }
+      return null;
+    };
+    const byId = function (list) { return new Map((list || []).map(function (r) { return [r.id, r]; })); };
+    const accounts = byId(rows.accounts), contacts = byId(rows.contacts);
+    const leadOf = { deal: new Map(), account: new Map(), contact: new Map() };
+    (rows.leads || []).forEach(function (l) {
+      l.code = countryCode(l.Country);
+      Object.keys(leadOf).forEach(function (k) { if (l.detail && l.detail[k]) leadOf[k].set(l.detail[k], l.Country); });
+    });
+    const written = function (v) {
+      const m = /country\s*:\s*([A-Za-z. ]+?)\s*(?=[\r\n,;|]|services|phone|email|message|$)/i.exec(v || "");
+      return m ? m[1] : null;
+    };
+    const fromAccount = function (id) {
+      const a = accounts.get(id) || {};
+      return [a.Billing_Country, a.Country, leadOf.account.get(id)];
+    };
+    const fromContact = function (id) {
+      const c = contacts.get(id) || {};
+      return [c.Mailing_Country, c.Country, leadOf.contact.get(id)];
+    };
+    const dealById = byId(dealRows);
+    const accountDeals = new Map();
+    rows.deals.forEach(function (deal) {
+      const r = dealById.get(deal.id);
+      deal.country = first([r.Country].concat(fromAccount(deal.accountId), fromContact(deal.contactId), leadOf.deal.get(deal.id), written(r.Description)));
+      if (deal.accountId && deal.country && !accountDeals.has(deal.accountId)) accountDeals.set(deal.accountId, deal.country);
+    });
+    (rows.accounts || []).forEach(function (a) { a.code = first(fromAccount(a.id).concat(accountDeals.get(a.id))); });
+    (rows.contacts || []).forEach(function (c) {
+      c.code = first(fromContact(c.id).concat(fromAccount(idOf(c.Account_Name)), accountDeals.get(idOf(c.Account_Name))));
+    });
+    (rows.campaigns || []).forEach(function (c) { c.code = countryCode(c.Country); });
+    (rows.targets || []).forEach(function (t) { t.code = countryCode(t[TARGETS.country]); });
   }
 
   // Contact ids on a campaign's member list.
@@ -628,54 +938,63 @@ window.Data = (function () {
     return touches;
   }
 
+  /*
+   * Tags each deal once with its source channel ("Other / not set" when none matches) and the channels
+   * its contact engaged with in the 180 days before the deal was created. Every card reads these tags.
+   */
+  function tagChannels(deals, campaigns, touches) {
+    const campaignType = new Map((campaigns || []).map(function (c) { return [c.id, c[FIELDS.campaign.type]]; }));
+    deals.forEach(function (d) {
+      d.source = channelName(d.leadSource) || channelName(campaignType.get(d.campaignId)) || OTHER_CHANNEL;
+      d.channels = Array.from(new Set((touches.get(d.contactId) || []).filter(function (t) {
+        const age = (d.created - t.date) / 864e5;
+        return d.created && age >= 0 && age <= INFLUENCE_DAYS;
+      }).map(function (t) { return t.channel; })));
+    });
+  }
+
   // Builds one country's raw record from fetched rows.
-  function liveRaw(code, days, rows) {
-    const mine = function (list, field) {
-      return list && list.filter(function (r) { return countryCode(r[field]) === code; });
+  function liveRaw(code, range, rows) {
+    const wanted = code === OTHER_COUNTRY ? null : code;
+    const mine = function (list) {
+      return list && list.filter(function (r) { return r.code === wanted; });
     };
-    const deals = rows.deals.filter(function (d) { return d.country === code; });
-    const accounts = mine(rows.accounts, FIELDS.account.country);
-    const contacts = mine(rows.contacts, FIELDS.contact.country);
-    const leads = mine(rows.leads, FIELDS.lead.country);
+    const deals = rows.deals.filter(function (d) { return inCountry(d, code); });
+    const accounts = mine(rows.accounts);
+    const contacts = mine(rows.contacts);
+    const leads = mine(rows.leads);
     const C = FIELDS.campaign;
     const Ld = FIELDS.lead;
-    const campaignRows = mine(rows.campaigns, C.country);
-    const open = deals.filter(isOpen);
-    const since = daysAgo(days), before = daysAgo(days * 2);
+    const campaignRows = mine(rows.campaigns);
+    // The period, and the one before it of the same length (none for All time).
+    const since = periodStart(range);
+    const days = RANGE_DAYS[range];
+    const before = since && new Date(since.getFullYear(), since.getMonth(), since.getDate() - days);
+    const confirmed = pickDeals(deals, { from: since, option: "won" });
+    const confirmedAll = pickDeals(deals, { from: null, option: "won" });
+    const unconfirmed = pickDeals(deals, { option: "open" });
 
-    const campaignType = new Map((rows.campaigns || []).map(function (c) { return [c.id, c[C.type]]; }));
-    const sourceOf = function (d) { return channelName(d.leadSource) || channelName(campaignType.get(d.campaignId)); };
-    const channelsOf = function (d) {
-      return new Set((rows.touches.get(d.contactId) || []).filter(function (t) {
-        const age = (d.created - t.date) / 864e5;
-        return age >= 0 && age <= INFLUENCE_DAYS;
-      }).map(function (t) { return t.channel; }));
-    };
-
-    // The one attribution rule, used for the totals and for each month of the trend.
+    // The one attribution rule, for confirmed deals only. Each deal's amount goes to exactly one
+    // source channel ("Other / not set" when none matches), so the channels add up to the total.
     function attributionOf(list) {
       const out = {
         rows: CHANNELS.map(function (c) { return { channel: c, sourced: 0, influenced: 0 }; }),
-        sourced: 0,
+        sourced: 0, // marketing channels only, without "Other / not set"
         influenced: 0
       };
-      list.filter(function (d) { return d.stage !== LOST; }).forEach(function (d) {
-        const source = sourceOf(d);
-        if (source) {
-          out.rows[CHANNELS.indexOf(source)].sourced += d.amount;
-          out.sourced += d.amount;
-        }
-        const channels = channelsOf(d);
-        channels.forEach(function (c) { out.rows[CHANNELS.indexOf(c)].influenced += d.amount; });
-        if (channels.size && isOpen(d)) out.influenced += d.amount; // counted once per deal
+      list.forEach(function (d) {
+        out.rows[CHANNELS.indexOf(d.source)].sourced += d.amount;
+        if (d.source !== OTHER_CHANNEL) out.sourced += d.amount;
+        d.channels.forEach(function (c) { out.rows[CHANNELS.indexOf(c)].influenced += d.amount; });
+        if (d.channels.length) out.influenced += d.amount; // counted once per deal
       });
       return out;
     }
-    const totals = attributionOf(deals);
+    const totals = attributionOf(confirmed);
     const attributionRows = totals.rows, sourced = totals.sourced, influenced = totals.influenced;
     const trendMonths = lastMonths(12);
     const byMonth = trendMonths.map(function (month) {
-      return attributionOf(deals.filter(function (d) { return d.created && inMonth(d.created.toISOString(), month); })).rows;
+      return attributionOf(confirmedAll.filter(function (d) { return inMonth(d.closedOn, month); })).rows;
     });
     const history = function (key) {
       return CHANNELS.map(function (_, c) { return byMonth.map(function (rowsOfMonth) { return rowsOfMonth[c][key]; }); });
@@ -686,9 +1005,9 @@ window.Data = (function () {
     const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
     const quarterEnd = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 3, 1);
     const closedWonQuarter = sum(deals.filter(function (d) {
-      return d.stage === WON && within(d.close, quarterStart, quarterEnd);
+      return d.stage === WON && within(d.closedOn, quarterStart, quarterEnd);
     }), function (d) { return d.amount; });
-    const targets = mine(rows.targets, TARGETS.country);
+    const targets = mine(rows.targets);
     const target = targets
       ? sum(targets.filter(function (t) { return within(t[TARGETS.period], quarterStart, quarterEnd); }),
             function (t) { return Number(t[TARGETS.amount]) || 0; })
@@ -707,7 +1026,7 @@ window.Data = (function () {
       .map(function (r) {
         const first = rows.firstTouch.get(r.id);
         return {
-          owner: r[LEAD_RESPONSE.owner] || "Unassigned",
+          owner: text(r.Owner) || "Unassigned",
           source: channelName(r[Ld.source]),
           month: toDate(r[Ld.created]),
           responseMinutes: first ? Math.max(0, (first - toDate(r[Ld.created])) / 60000) : null
@@ -722,10 +1041,11 @@ window.Data = (function () {
     // Win rate and monthly figures from closing dates.
     const months12 = lastMonths(12);
     const monthly = months12.map(function (month) {
-      const done = deals.filter(function (d) { return !isOpen(d) && inMonth(d.close, month); });
+      const done = deals.filter(function (d) { return !isOpen(d) && inMonth(d.closedOn, month); });
       const wins = done.filter(function (d) { return d.stage === WON; });
       return { label: month.label, won: wins.length, lost: done.length - wins.length, closed: done.length,
-               revenue: sum(wins, function (d) { return d.amount; }) };
+               revenue: sum(wins, function (d) { return d.amount; }),
+               lostValue: sum(done.filter(function (d) { return d.stage === LOST; }), function (d) { return d.amount; }) };
     });
     const last6 = monthly.slice(6), prev6 = monthly.slice(0, 6);
     const winOf = function (list) {
@@ -735,8 +1055,9 @@ window.Data = (function () {
     // Counts in a window. null (shown as "—") when the module or field is unavailable.
     const fieldTotal = function (types, field, from, to) {
       if (!campaignRows || !(rows.campaigns || []).some(function (r) { return r[field] != null; })) return null;
+      // By campaign Start Date; under All time a campaign without a start date counts too.
       return sum(campaignRows.filter(function (r) {
-        return within(r[C.start], from, to) && (!types || types.indexOf(channelName(r[C.type])) !== -1);
+        return ((!from && !to) || within(r[C.start], from, to)) && (!types || types.indexOf(channelName(r[C.type])) !== -1);
       }), function (r) { return Number(r[field]) || 0; });
     };
     const leadCount = function (from, to, filter) {
@@ -747,10 +1068,9 @@ window.Data = (function () {
       return function (r) { return list.indexOf(String(r[FIELDS.lead.status] || "").toLowerCase()) !== -1; };
     };
     const fromWeb = function (r) { return channelName(r[FIELDS.lead.source]) === "Website"; };
-    const sourcedDeals = deals.filter(function (d) { return d.created && d.created >= since && sourceOf(d); });
+    const sourcedDeals = deals.filter(function (d) { return d.created && (!since || d.created >= since) && d.source !== OTHER_CHANNEL; });
 
     function windowMetrics(from, to) {
-      // TODO: converted leads are not returned by default; include them if leads convert quickly.
       return {
         webinar: fieldTotal(["Webinars"], C.webinar, from, to),
         events: fieldTotal(["Events"], C.events, from, to),
@@ -763,28 +1083,66 @@ window.Data = (function () {
       };
     }
     const current = windowMetrics(since);
-    const earlier = windowMetrics(before, since);
+    // All time has no earlier period to compare with.
+    const earlier = since ? windowMetrics(before, since)
+      : { webinar: null, events: null, linkedin: null, enquiries: null, leads: null, mql: null, sql: null, spend: null };
 
     const newAccounts = accounts && accounts.filter(function (a) { return within(a[FIELDS.account.created], since); }).length;
-    const prevAccounts = accounts && accounts.filter(function (a) { return within(a[FIELDS.account.created], before, since); }).length;
+    const prevAccounts = accounts && since ? accounts.filter(function (a) { return within(a[FIELDS.account.created], before, since); }).length : null;
 
-    const temperature = {};
-    (accounts || []).forEach(function (a) {
-      const t = a[FIELDS.account.temperature];
-      if (t) temperature[t] = (temperature[t] || 0) + 1;
-    });
-
-    const byStage = {};
-    open.forEach(function (d) { byStage[d.stage] = (byStage[d.stage] || 0) + d.amount; });
     const reached = deals.map(function (d) { return STAGES.findIndex(function (s) { return s.name === d.stage; }); });
 
-    const services = rows.serviceGroups
-      ? rows.serviceGroups.filter(function (g) { return countryCode(g.country) === code; })
-      : open.map(function (d) { return { key: serviceKey(d.service), value: d.amount, deals: 1 }; });
+    // Confirmed deals only, each split between its services as in toDeal.
+    const services = serviceParts(confirmed);
+
+    const movedLeads = leads && leads.filter(function (l) { return l.converted && l.toDeal; });
+    // Moved leads whose deal is in another country, or no longer in Deals (deleted or never created).
+    const dealCountry = new Map(rows.deals.map(function (d) { return [d.id, d.country]; }));
+    const movedElsewhere = movedLeads && movedLeads.filter(function (l) {
+      return dealCountry.has(l.detail.deal) && dealCountry.get(l.detail.deal) !== wanted;
+    });
+    const movedMissing = movedLeads && movedLeads.filter(function (l) { return !dealCountry.has(l.detail.deal); });
+    if (movedLeads && (movedElsewhere.length || movedMissing.length)) {
+      console.info("[widget] " + code + ": moved leads whose deal is not in " + code,
+        movedElsewhere.concat(movedMissing).map(function (l) {
+          return { lead: l.name, leadId: l.id, dealId: l.detail.deal, dealCountry: dealCountry.has(l.detail.deal) ? dealCountry.get(l.detail.deal) || "not set" : "deal not found" };
+        }));
+    }
+    const openLeads = leads && leads.filter(function (l) { return !l.converted && !LOST_LEAD.test(l[Ld.status] || ""); });
+    const temperature = {}; // open leads only, each counted once
+    (openLeads || []).forEach(function (l) {
+      const t = temperatureOf(l) || "Not checked yet";
+      temperature[t] = (temperature[t] || 0) + 1;
+    });
+    const known = rows.convertedKnown;
+    const leadStats = leads ? {
+      total: leads.length,
+      created: leads.filter(function (l) { return within(l[Ld.created], since); }).length,
+      prevCreated: since ? leads.filter(function (l) { return within(l[Ld.created], before, since); }).length : null,
+      open: openLeads.length,
+      lost: leads.filter(function (l) { return !l.converted && LOST_LEAD.test(l[Ld.status] || ""); }).length,
+      moved: known ? movedLeads.length : null,
+      movedPeriod: known ? movedLeads.filter(function (l) { return within(l.convertedOn, since); }).length : null,
+      otherConverted: known ? leads.filter(function (l) { return l.converted && !l.toDeal; }).length : null,
+      movedElsewhere: known ? movedElsewhere.length : null,
+      movedMissing: known ? movedMissing.length : null,
+      byStatus: openLeads.reduce(function (all, l) {
+        const s = l[Ld.status] && l[Ld.status] !== "-None-" ? l[Ld.status] : "No status";
+        all[s] = (all[s] || 0) + 1;
+        return all;
+      }, {}),
+      months: lastMonths(6).map(function (month) {
+        return {
+          label: month.label,
+          created: leads.filter(function (l) { return inMonth(l[Ld.created], month); }).length,
+          moved: movedLeads.filter(function (l) { return inMonth(l.convertedOn, month); }).length
+        };
+      })
+    } : emptyLeads();
 
     return {
       code: code,
-      asOf: now.toISOString().slice(0, 10),
+      asOf: localDay(now),
       target: target,
       closedWonQuarter: closedWonQuarter,
       stageDays: stageDays,
@@ -795,16 +1153,21 @@ window.Data = (function () {
       bdm: unique(deals.map(function (d) { return d.owner; })).slice(0, 3).join(", "),
       bde: unique(deals.map(function (d) { return d.bde; })).slice(0, 3).join(", "),
       accounts: accounts ? accounts.length : unique(deals.map(function (d) { return d.account; })).length,
-      pipeline: sum(open, function (d) { return d.amount; }),
-      forecast: sum(open, function (d) { return d.amount * d.probability / 100; }),
-      openDeals: open.length,
-      byStage: byStage,
-      // A deal at one stage has reached the earlier ones. Lost deals are left out.
+      confirmedAmount: sum(confirmed, function (d) { return d.amount; }),
+      confirmedCount: confirmed.length,
+      confirmedDeals: confirmed,
+      unconfirmedAmount: sum(unconfirmed, function (d) { return d.amount; }),
+      unconfirmedCount: unconfirmed.length,
+      // An estimate: amount × stage %. Open stages that are not mapped add nothing.
+      weighted: sum(unconfirmed, function (d) { return d.bucket === null ? 0 : d.amount * d.bucket / 100; }),
+      byBucket: bucketTotals(unconfirmed),
+      // Not shown (the Stage conversion card is not on any tab). A deal at one stage has reached the earlier ones.
       funnel: STAGES.map(function (s, i) { return reached.filter(function (x) { return x >= i; }).length; }),
       services: services,
+      leadStats: leadStats,
       win: winOf(last6),
       newAccounts: accounts ? newAccounts : null,
-      influenced: contacts || rows.campaigns ? influenced : null,
+      influenced: rows.touches.size ? influenced : null, // unknown until contact engagement is recorded
       months: last6,
       temperature: temperature,
       attribution: attributionRows,
@@ -813,8 +1176,8 @@ window.Data = (function () {
         opportunities: sourcedDeals.length,
         won: sourcedDeals.filter(function (d) { return d.stage === WON; }).length
       }),
-      // Pipeline, forecast, open-deal and attribution history isn't available, so no delta for those.
-      previous: Object.assign({ pipeline: null, forecast: null, openDeals: null, influenced: null, sourced: null,
+      // Attribution history isn't available, so no delta for those.
+      previous: Object.assign({ influenced: null, sourced: null,
                                 win: winOf(prev6), newAccounts: accounts ? prevAccounts : null }, earlier),
       spark: {
         win: monthly.map(function (x) { return { won: x.won, closed: x.closed }; }),
@@ -822,29 +1185,30 @@ window.Data = (function () {
           return accounts.filter(function (a) { return inMonth(a[FIELDS.account.created], month); }).length;
         }) : []
       },
+      // Campaign spend is not limited to the period, so its confirmed amount is all-time too.
       campaigns: (campaignRows || []).map(function (c) {
-        const linked = deals.filter(function (d) { return d.campaignId === c.id; });
+        const linked = confirmedAll.filter(function (d) { return d.campaignId === c.id; });
         const state = String(c[C.status] || "").toLowerCase();
         return {
           name: c[C.name] || "(unnamed campaign)",
           channel: channelName(c[C.type]) || c[C.type] || "—",
           spend: c[C.spend] != null ? Number(c[C.spend]) : null,
           leads: c[C.leads] != null ? Number(c[C.leads]) : null,
-          pipeline: sum(linked.filter(isOpen), function (d) { return d.amount; }),
-          revenue: sum(linked.filter(function (d) { return d.stage === WON; }), function (d) { return d.amount; }),
+          confirmed: sum(linked, function (d) { return d.amount; }),
           status: /complete|ended/.test(state) ? "Ended" : /inactive|hold|paus/.test(state) ? "Paused" : "Active"
         };
       }),
       deals: deals,
-      activity: liveActivity(deals, accounts || [], contacts || [], rows.activity)
+      activity: liveActivity(deals, accounts || [], contacts || [], leads || [], rows.activity)
     };
   }
 
   // Notes, meetings, calls and tasks linked to this country's records.
-  function liveActivity(deals, accounts, contacts, activity) {
+  function liveActivity(deals, accounts, contacts, leads, activity) {
     const related = new Map();
     accounts.forEach(function (a) { related.set(a.id, {}); });
-    contacts.forEach(function (c) { related.set(c.id, { rating: c[FIELDS.contact.rating] }); });
+    contacts.forEach(function (c) { related.set(c.id, {}); });
+    leads.forEach(function (l) { related.set(l.id, { name: l.name, rating: l.converted || LOST_LEAD.test(l[FIELDS.lead.status] || "") ? null : temperatureOf(l) }); });
     deals.forEach(function (d) { related.set(d.id, { probability: d.probability, name: d.name }); });
     const ratingTypes = { Hot: "red", Warm: "orange", Cold: "cold" };
 
@@ -859,7 +1223,7 @@ window.Data = (function () {
         title: info.name || a.title,
         detail: a.verb + (a.title ? ": " + a.title : "") + " · " + timeAgo(a.when)
       };
-      if (info.probability !== undefined) {
+      if (info.probability !== undefined && info.probability !== null) {
         item.pill = info.probability + "%";
         item.pillType = "blue";
       } else if (ratingTypes[info.rating]) {
@@ -868,11 +1232,26 @@ window.Data = (function () {
       }
       items.push(item);
     });
+
+    // The records themselves: created, moved to a deal, won and lost.
+    const record = function (when, iconName, title, verb, pill, pillType) {
+      if (!when) return;
+      items.push({ ageHours: (Date.now() - when) / 36e5, icon: iconName, title: title, detail: verb + " · " + timeAgo(when), pill: pill, pillType: pillType });
+    };
+    leads.forEach(function (l) {
+      record(toDate(l[FIELDS.lead.created]), "click", l.name, "Lead created");
+      if (l.converted) record(toDate(l.convertedOn), "handshake", l.name, l.toDeal ? "Lead moved to a deal" : "Lead converted without a deal");
+    });
+    deals.forEach(function (x) {
+      record(x.created, "wallet", x.name, "Deal created", x.probability === null ? undefined : x.probability + "%", "blue");
+      if (x.closedOn) record(toDate(x.closedOn), "docCheck", x.name, x.stage === WON ? "Deal won" : "Deal lost", x.stage === WON ? "Won" : "Lost", x.stage === WON ? "green" : "red");
+    });
+    accounts.forEach(function (a) { record(toDate(a[FIELDS.account.created]), "building", a.Account_Name || "Account", "Account created"); });
     return items;
   }
 
   // TODO: confirm the activity modules and fields.
-  async function fetchActivity() {
+  async function fetchActivity(problems) {
     const sources = [
       { module: "Notes", icon: "docCheck", verb: "Note added", title: "Note_Title", links: ["Parent_Id"] },
       { module: "Events", icon: "calendar", verb: "Meeting booked", title: "Event_Title", links: ["What_Id", "Who_Id"] },
@@ -883,7 +1262,11 @@ window.Data = (function () {
       const rows = await App.fetchWithFallback(function () {
         return App.coql("select " + [s.title].concat(s.links, "Created_Time").join(", ") + " from " + s.module +
           " where Created_Time is not null order by Created_Time desc limit 0, 50");
-      }, []);
+      }, null);
+      if (!rows) {
+        problems.push(s.module + " (recent activity)");
+        return [];
+      }
       return rows.map(function (r) {
         return {
           icon: s.icon, verb: s.verb, title: r[s.title] || "", when: toDate(r.Created_Time),
@@ -894,93 +1277,168 @@ window.Data = (function () {
     return lists.flat();
   }
 
-  async function fetchLive(state) {
-    const codes = state.country === "ALL" ? CODES : [state.country];
-    const values = quoted(codes.reduce(function (all, c) { return all.concat(COUNTRY_VALUES[c]); }, []));
-    const select = function (module, fields, countryField) {
-      return "select " + fields.join(", ") + " from " + module + " where " + countryField + " in (" + values + ")";
+  // Every record the dashboard needs. Deals are essential; the rest may be missing.
+  async function fetchRows() {
+    const problems = [];
+    const records = function (module, params) {
+      return App.allRecords(module, params).catch(function (err) {
+        console.warn("[widget] " + module + " could not be read:", (err && err.message) || err);
+        problems.push(module);
+        return null;
+      });
     };
-    const D = FIELDS.deal, A = FIELDS.account, C = FIELDS.contact, M = FIELDS.campaign, Ld = FIELDS.lead;
-    const dealFields = Object.keys(D).map(function (k) { return D[k]; });
-
-    // Deals are essential: if this throws, loadData falls back to sample data.
-    const dealRows = await query(select("Deals", dealFields, D.country));
     const results = await Promise.all([
-      optional(select("Accounts", [A.country, A.created, A.temperature], A.country)),
-      optional(select("Contacts", [C.country, C.rating, C.engaged, C.channels], C.country)),
-      optional(select("Campaigns", Object.keys(M).map(function (k) { return M[k]; }), M.country)),
-      optional(select("Leads", ["id", Ld.source, Ld.status, Ld.created, Ld.country], Ld.country)),
-      // Open pipeline grouped by service line and country.
-      optional("select " + D.service + ", " + D.country + ", SUM(" + D.amount + "), COUNT(id) from Deals where ((" +
-        D.country + " in (" + values + ")) and (" + D.stage + " not in (" + quoted(CLOSED_VALUES) + "))) group by " +
-        D.service + ", " + D.country),
-      fetchActivity(),
-      optional(select(TARGETS.module, [TARGETS.country, TARGETS.period, TARGETS.amount], TARGETS.country)),
-      // Queried separately so a missing custom field doesn't fail the main deals query.
-      optional(select("Deals", ["id", DEAL_AGES.lastActivity, DEAL_AGES.stageEntered], D.country)),
-      optional("select id, " + LEAD_RESPONSE.owner + " from Leads where " + Ld.country + " in (" + values + ")"),
+      App.allRecords("Deals"),
+      records("Accounts"),
+      records("Contacts"),
+      records("Campaigns"),
+      records("Leads"),
+      App.fetchWithFallback(function () { return App.allRecords("Leads", { converted: "true" }); }, null),
+      fetchActivity(problems),
+      optional("select " + [TARGETS.country, TARGETS.period, TARGETS.amount].join(", ") + " from " + TARGETS.module + " where id is not null"),
       Promise.all(LEAD_RESPONSE.activityModules.map(function (m) {
         return optional("select Who_Id, What_Id, Created_Time from " + m + " where Created_Time is not null order by Created_Time desc");
-      }))
+      })),
+      App.fetchWithFallback(function () { return App.stageValues(); }, null)
     ]);
 
-    const ages = new Map((results[7] || []).map(function (r) { return [r.id, r]; }));
-    const owners = new Map((results[8] || []).map(function (r) { return [r.id, r[LEAD_RESPONSE.owner]]; }));
-    if (results[3]) results[3].forEach(function (l) { l[LEAD_RESPONSE.owner] = owners.get(l.id); });
+    if (!results[7]) problems.push("Sales targets");
+    if (!results[9]) problems.push("Deal stage list");
+    setStages(results[9] || []);
+    const dealRows = results[0];
+    const deals = dealRows.map(toDeal);
+    completeStages(deals);
+    // Deals that cannot be counted correctly are named, never silently counted as ₹0.
+    const flag = function (test, text) {
+      const n = deals.filter(test).length;
+      if (n) problems.push(n + (n === 1 ? " deal " : " deals ") + text);
+    };
+    flag(function (d) { return d.unconverted; }, "in another currency with no exchange rate (not added)");
+    flag(function (d) { return d.noAmount && d.group !== "lost"; }, "with no amount (counted as ₹0)");
+    flag(function (d) { return d.group === "confirmed" && !d.closedOn; }, "won with no closing date (not in any period)");
+    flag(function (d) { return d.group === "unconfirmed" && d.bucket === null; }, "at a stage with no % bucket (shown as Not mapped)");
+    flag(function (d) { return d.serviceMismatch && d.group !== "lost"; },
+      "whose service amounts do not add up to Amount (split equally; the deal page shows their sum instead)");
+
+    // Converted leads have left the Leads list, so they are read separately.
+    const isConverted = function (l) { return l.$converted === true || l.Converted__s === true || !!l.$converted_detail; };
+    const second = results[5];
+    const convertedRows = second ? second.filter(isConverted) : [];
+    // Rows that are not converted mean CRM ignored the request, so the number is unknown.
+    const convertedKnown = !!second && (!second.length || convertedRows.length > 0);
+    if (results[4] && !convertedKnown) problems.push("converted leads");
+    const seen = new Set();
+    const leads = results[4] && convertedRows.concat(results[4]).filter(function (l) {
+      if (seen.has(l.id)) return false;
+      seen.add(l.id);
+      return true;
+    }).map(function (l) {
+      const detail = l.$converted_detail || null;
+      const lead = Object.assign({}, l, { converted: isConverted(l) });
+      lead.detail = detail && { deal: idOf(detail.deal), account: idOf(detail.account), contact: idOf(detail.contact) };
+      // Moved to a deal only when CRM names the deal; a conversion without details is not assumed to have one.
+      lead.toDeal = lead.converted && !!(lead.detail && lead.detail.deal);
+      lead.convertedOn = lead.converted ? (detail && detail.convert_date) || l.Converted_Date_Time || l.Modified_Time : null;
+      lead.name = l.Full_Name || [l.First_Name, l.Last_Name].filter(Boolean).join(" ") || "Lead";
+      return lead;
+    });
+
     const firstTouch = new Map();
-    results[9].forEach(function (list) {
+    results[8].forEach(function (list) {
       (list || []).forEach(function (a) {
         const when = toDate(a.Created_Time);
         [a.Who_Id, a.What_Id].forEach(function (link) {
-          const id = link && (link.id || link);
+          const id = idOf(link);
           if (id && when && (!firstTouch.has(id) || when < firstTouch.get(id))) firstTouch.set(id, when);
         });
       });
     });
-    const day = function (v) { return v ? String(v).slice(0, 10) : null; };
 
-    const groups = results[4] && results[4].map(function (r) {
-      const keys = Object.keys(r);
-      return {
-        key: serviceKey(r[D.service]),
-        country: r[D.country],
-        value: Number(r[keys.find(function (k) { return /^sum/i.test(k); })]) || 0,
-        deals: Number(r[keys.find(function (k) { return /^count/i.test(k); })]) || 0
-      };
-    });
     const rows = {
-      targets: results[6],
-      firstTouch: firstTouch,
-      deals: dealRows.map(function (r) {
-        const deal = toDeal(r), extra = ages.get(r.id) || {};
-        deal.lastActivityDate = day(extra[DEAL_AGES.lastActivity] || r[D.created]);
-        deal.stageEnteredDate = day(extra[DEAL_AGES.stageEntered]);
-        return deal;
-      }),
-      accounts: results[0], contacts: results[1], campaigns: results[2], leads: results[3],
-      serviceGroups: groups, activity: results[5]
+      deals: deals, accounts: results[1], contacts: results[2], campaigns: results[3], leads: leads, convertedKnown: convertedKnown,
+      activity: results[6], targets: results[7], firstTouch: firstTouch, problems: problems
     };
+    setCountries(rows, dealRows);
     rows.touches = await buildTouches(rows.campaigns, rows.contacts, rows.deals);
-
-    const days = RANGE_DAYS[state.range] || 30;
-    return build(codes.map(function (c) { return liveRaw(c, days, rows); }), state, "live");
+    tagChannels(rows.deals, rows.campaigns, rows.touches);
+    return rows;
   }
 
-  // The only entry point tabs' data comes through.
+  // Filters reuse the rows just read. Refresh, or two minutes, reads them again.
+  let cached = null, cachedAt = 0;
+  function reset() { cached = null; }
+  function currentRows() {
+    if (!cached || Date.now() - cachedAt > 120000) {
+      const job = fetchRows();
+      cached = job;
+      cachedAt = Date.now();
+      job.catch(function () { if (cached === job) cached = null; });
+    }
+    return cached;
+  }
+
+  async function fetchLive(state) {
+    const rows = await currentRows();
+    // "Country not set" is always part of All countries, so no record is ever dropped.
+    const raws = CODES.concat(OTHER_COUNTRY).map(function (c) { return liveRaw(c, state.range, rows); });
+    const data = build(state.country === "ALL" ? raws : raws.filter(function (r) { return r.code === state.country; }), state, "live");
+    const without = rows.deals.some(function (d) { return !d.country; }) || (rows.leads || []).some(function (l) { return !l.code; });
+    data.countries = raws.map(countryRow).filter(function (c) { return c.code !== OTHER_COUNTRY || without; });
+    data.problems = rows.problems;
+    // Figures per country, to compare with a CRM report (open the browser console).
+    console.table(summary(raws));
+    return data;
+  }
+
+  // One line per country and one for All, with the figures a CRM report can confirm.
+  function summary(raws) {
+    const line = function (label, list) {
+      const t = function (key) { return sum(list, function (r) { return r[key]; }); };
+      const out = {
+        country: label, confirmedCount: t("confirmedCount"), confirmedAmount: t("confirmedAmount"),
+        unconfirmedCount: t("unconfirmedCount"), unconfirmedAmount: t("unconfirmedAmount")
+      };
+      BUCKETS.concat("none").forEach(function (b) {
+        out["count" + b] = sum(list, function (r) { return r.byBucket[b].count; });
+        out["amount" + b] = sum(list, function (r) { return r.byBucket[b].amount; });
+      });
+      return out;
+    };
+    return raws.map(function (r) { return line(r.code, [r]); }).concat(line("ALL", raws));
+  }
+
+  // The only entry point tabs' data comes through. A failed read is marked as failed, never shown as zero.
   async function loadData(state) {
-    const live = await App.fetchWithFallback(function () { return fetchLive(state); }, null);
-    return live || getData(state);
+    try {
+      return await fetchLive(state);
+    } catch (err) {
+      const reason = (err && err.message) || String(err);
+      console.warn("[widget] Fetch failed:", reason);
+      return Object.assign(getData(state), { failed: true, countries: [], problems: [], reason: reason });
+    }
   }
 
   return {
     CODES: CODES,
     SERVICES: SERVICES,
     STAGES: STAGES,
+    BUCKETS: BUCKETS,
+    BUCKET_NAMES: BUCKET_NAMES,
+    OPTIONS: OPTIONS,
+    OTHER_COUNTRY: OTHER_COUNTRY,
     atRisk: atRisk,
     serviceKey: serviceKey,
     serviceTotals: serviceTotals,
     shares: shares,
     getData: getData,
-    loadData: loadData
+    loadData: loadData,
+    reset: reset,
+    // For the Node tests only.
+    _test: {
+      toDeal: toDeal, setCountries: setCountries, liveRaw: liveRaw, build: build, countryRow: countryRow,
+      stageBucket: stageBucket, dealGroup: dealGroup, splitAmount: splitAmount, serviceParts: serviceParts,
+      serviceTotals: serviceTotals, summary: summary, localDay: localDay, OTHER_COUNTRY: OTHER_COUNTRY,
+      pickDeals: pickDeals, periodStart: periodStart, tagChannels: tagChannels, optionBlock: optionBlock
+    }
   };
 })();

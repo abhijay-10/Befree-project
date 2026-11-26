@@ -113,6 +113,9 @@
     if (toDate(m.start) > now) return 'upcoming';
     return businessDaysSince(m.start, now) > 1 ? 'overdue' : 'due';
   }
+  // Unlocks Convert to Deal. A declined invitation or any other outcome does not count.
+  const inviteAccepted = m => !!(C.acceptOnInvite && m && m.invited && !m.outcome && m.reply !== 'declined');
+  const meetingAccepted = v => v.meetings.some(m => m.outcome === 'Accepted') || inviteAccepted(latestMeeting(v));
   const canRaiseDeal = v => v.meetings.some(m => m.outcome === 'Accepted');
   function checkOutcome(f) {
     if (!C.outcomes.includes(f.outcome)) return 'Choose an outcome.';
@@ -131,13 +134,37 @@
     return { accounts, contacts, contactId: first ? first.id : '', accountId: (first && first.accountId) || (accounts[0] ? accounts[0].id : '') };
   }
   function checkConvert(f, choices) {
-    if (!String(f.dealName || '').trim()) return 'Enter the deal name.';
-    if (!f.stage) return 'Choose a stage.';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.closingDate || '')) return 'Choose a closing date.';
-    if (f.amount && !(Number(f.amount) >= 0)) return 'The amount must be a number, 0 or more.';
+    if (f.createDeal) {
+      if (!String(f.dealName || '').trim()) return 'Enter the deal name.';
+      if (!f.stage) return 'Choose a stage.';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f.closingDate || '')) return 'Choose a closing date.';
+      if (f.amount && !(Number(f.amount) >= 0)) return 'The amount must be a number, 0 or more.';
+    }
     const c = choices.contacts.find(x => x.id === f.contactId);
     if (c && c.accountId && c.accountId !== f.accountId) return c.name + ' belongs to another account. Choose that account, or create a new contact.';
     return null;
+  }
+
+  /* ---------- temperature saved by the AI summary function ---------- */
+  const heats = ['Hot', 'Warm', 'Cold', 'Not enough data'];
+  const isStopped = (optedOut, status) => !!optedOut || /junk|lost|not qualified|unqualified|dead/i.test(status || '');
+  // The CRM field is the result. The details are shown only if they belong to that result.
+  function savedTemperature(field, details, optedOut, status) {
+    const d = details && heats.includes(details.value) ? details : null;
+    const value = heats.includes(field) ? field : d ? d.value : '';
+    if (isStopped(optedOut, status) && value !== 'Cold' && value) return { value: 'Cold', details: { good: [], bad: [optedOut ? 'Opted out' : 'Lead status is ' + status], sources: [] } };
+    const list = x => (Array.isArray(x) ? x : []).filter(y => typeof y === 'string' && y.trim()).slice(0, 3);
+    return { value, details: d && d.value === value ? { ...d, good: list(d.good), bad: list(d.bad), sources: (Array.isArray(d.sources) ? d.sources : []).filter(x => x && /^https?:\/\//.test(x.url)) } : null };
+  }
+  // Open leads only, the same way as the Admin widget: lost and junk leads are left out, opted-out leads are Cold
+  function countTemperatures(leads) {
+    const out = { Hot: 0, Warm: 0, Cold: 0, 'Not enough data': 0, none: 0, total: 0 };
+    leads.filter(l => !isStopped(false, l.status)).forEach(l => {
+      const t = savedTemperature(l.temperature, null, l.optedOut, l.status).value;
+      out[t || 'none']++;
+      out.total++;
+    });
+    return out;
   }
 
   // Checks the AI answer before it is shown. CRM facts win over the AI result.
@@ -151,7 +178,7 @@
     };
     if (!Object.keys(verdicts).includes(s.verdict) || !s.summary) throw new Error('The AI answer was incomplete. Please try again.');
     const set = (verdict, why) => { if (s.verdict !== verdict) { s.verdict = verdict; s.changed = why; } };
-    const written = !!(v.notes && v.notes.length) || !!v.described;
+    const written = !!(v.notes && v.notes.some(n => n.title !== C.inviteNote)) || !!v.described;
     if (isOptedOut(v.contact)) {
       set('not_interested', 'Result set from CRM: this lead has opted out.');
       s.next = 'Do not contact this lead. They have opted out.';
@@ -177,7 +204,7 @@
 
   const R = {
     toDate, day, daysBetween, addBusinessDays, businessDaysSince, segment, userFor, countServices, isHighIntent, engagement, temperature,
-    routing, isOptedOut, latestMeeting, meetingState, canRaiseDeal, checkOutcome, convertChoices, checkConvert, checkSummary, domainOf, can, canSee, visibleDeals
+    routing, isOptedOut, latestMeeting, meetingState, canRaiseDeal, inviteAccepted, meetingAccepted, checkOutcome, convertChoices, checkConvert, checkSummary, savedTemperature, countTemperatures, domainOf, can, canSee, visibleDeals
   };
   if (typeof module !== 'undefined') module.exports = R; else root.BefreeRules = R;
 })(this);

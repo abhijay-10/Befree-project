@@ -25,10 +25,15 @@
     },
     // AI summary: API name of the CRM function that calls OpenAI (see crm_functions/lead_ai_summary.dg)
     // savedField: Leads field that keeps the last summary (Multi Line, Large). Without it, summaries are kept in the browser only.
-    ai: { functionName: 'lead_ai_summary', savedField: 'AI_Summary_Data' },
-    // Convert to deal: 'duplicate' shows the button only when the duplicate alert finds a match, 'always' shows it on every lead.
+    // temperatureField: Leads pick list filled by the function: Hot, Warm, Cold, Not enough data. The Admin widget counts it.
+    ai: { functionName: 'lead_ai_summary', savedField: 'AI_Summary_Data', temperatureField: 'Lead_Temperature' },
+    // true: a sent meeting invitation counts as Meeting accepted and unlocks Convert to Deal.
+    // false: only the meeting outcome Accepted does (Befree rule R4).
+    acceptOnInvite: true,
+    inviteNote: 'Meeting invitation sent', // title of the note kept on the lead
+    inviteChecks: [500, 1000, 2000, 3000, 4000], // waits in ms before each check that CRM has sent it
     // functionName: CRM function that converts the lead (see crm_functions/lead_convert_to_deal.dg)
-    convert: { show: 'duplicate', functionName: 'lead_convert_to_deal' },
+    convert: { functionName: 'lead_convert_to_deal' },
     // Duplicate alert: these email domains do not identify a company
     freeMail: ['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk', 'yahoo.com.au', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'rediffmail.com', 'bigpond.com', 'zoho.com', 'zohomail.com'],
     closedTaskStatus: ['Completed', 'Done', 'Cancelled'],

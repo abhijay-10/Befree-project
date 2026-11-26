@@ -8,7 +8,7 @@ window.App = (function () {
     reports: "Reports & Analytics",
     marketing: "Marketing Activities"
   };
-  const ZOHO_TIMEOUT_MS = 5000;
+  const ZOHO_TIMEOUT_MS = 10000;
 
   let activeTab = "overview";
   const tabs = {};
@@ -32,11 +32,13 @@ window.App = (function () {
         reject(new Error("Not running inside Zoho CRM"));
       }, ZOHO_TIMEOUT_MS);
 
-      ZOHO.embeddedApp.on("PageLoad", function () {});
-      ZOHO.embeddedApp.init().then(function () {
+      const connected = function () {
         clearTimeout(timer);
         resolve();
-      }, reject);
+      };
+      ZOHO.embeddedApp.on("PageLoad", connected);
+      const started = ZOHO.embeddedApp.init();
+      if (started && started.then) started.then(connected, reject);
     });
     zohoReady.catch(function (err) { console.warn("[widget]", err.message); });
   }
@@ -62,6 +64,38 @@ window.App = (function () {
   async function coql(query) {
     await zohoReady;
     return readRows(await withTimeout(ZOHO.CRM.API.coql({ select_query: query })));
+  }
+
+  // Every record of a module, with all its fields. Reads until CRM says there are no more; if CRM refuses
+  // a page (it may above 2,000 records), the error is passed on instead of returning a short list.
+  async function allRecords(entity, params) {
+    await zohoReady;
+    let rows = [];
+    for (let page = 1; ; page++) {
+      const res = await withTimeout(ZOHO.CRM.API.getAllRecords(Object.assign({
+        Entity: entity, sort_order: "desc", per_page: 200, page: page
+      }, params)));
+      rows = rows.concat(readRows(res));
+      if (!res || !res.info || !res.info.more_records) break;
+    }
+    // A record moved between pages while reading is returned twice; keep it once.
+    const seen = new Set();
+    return rows.filter(function (r) {
+      if (!r || !r.id) return true;
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }
+
+  // The Deals stages as set up in CRM, in order.
+  async function stageValues() {
+    await zohoReady;
+    const res = await withTimeout(ZOHO.CRM.META.getFields({ Entity: "Deals" }));
+    const stage = ((res && res.fields) || []).find(function (f) { return f.api_name === "Stage"; });
+    return ((stage && stage.pick_list_values) || []).filter(function (p) { return p.type !== "unused"; })
+      .map(function (p) { return p.actual_value || p.display_value; })
+      .filter(function (v) { return v && v !== "-None-"; });
   }
 
   // One page of a related list, as { rows, more }.
@@ -191,6 +225,39 @@ window.App = (function () {
     return svg;
   }
 
+  /* ---------- Period and Won / Won + Open wording, shared by every card ---------- */
+
+  const PERIOD_TEXT = { "7d": "the last 7 days", "30d": "the last 30 days", "90d": "the last 90 days", "12m": "the last 12 months", all: "all time" };
+  function periodText(range) { return PERIOD_TEXT[range]; }
+
+  // Names the selected option and the dates it covers.
+  function optionText(option, range) {
+    return option === "won"
+      ? "Won only · closing date in " + periodText(range)
+      : "Won + Open · won: closing date in " + periodText(range) + " · open: deals open today, not limited by the date filter";
+  }
+
+  // "Won only" / "Won + Open" switch. Each card keeps its own choice.
+  function optionSwitch(current, onPick) {
+    const box = el("div", "ov-toggle opt-switch");
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "Deals included");
+    [["won", "Won only"], ["wonOpen", "Won + Open"]].forEach(function (o) {
+      const b = el("button", "", o[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(o[0] === current));
+      b.addEventListener("click", function () { if (o[0] !== current) onPick(o[0]); });
+      box.appendChild(b);
+    });
+    return box;
+  }
+
+  // "Won ₹X · Open ₹Y · Total ₹Z", shown in Won + Open.
+  function splitLine(won, open, format) {
+    const f = format || formatINR;
+    return el("p", "opt-split", "Won " + f(won) + " · Open " + f(open) + " · Total " + f(won === null || open === null ? null : won + open));
+  }
+
   // items = [{label, color}]
   function legend(items, className) {
     const box = el("div", className);
@@ -204,31 +271,34 @@ window.App = (function () {
     return box;
   }
 
-  // Sourced vs influenced dual bars and legend, shared by Reports and Marketing.
+  // One bar per channel: confirmed amount sourced by it. Shared by Reports and Marketing.
+  // Every confirmed deal is under exactly one channel ("Other / not set" if none), so the rows add up to the total.
   function attributionBars(data, legendClass) {
     const rows = data.attribution;
-    const max = Math.max.apply(null, [1].concat(...rows.map(function (r) { return [r.sourced, r.influenced]; })));
+    const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.sourced; })));
     const fragment = document.createDocumentFragment();
     rows.forEach(function (r) {
       const row = el("div", "rp-attr-row");
       const bars = el("div", "rp-attr-bars");
       bars.setAttribute("role", "img");
-      bars.setAttribute("aria-label", r.channel + ": sourced " + formatINR(r.sourced) + ", influenced " + formatINR(r.influenced));
-      [["sourced", "var(--blue)"], ["influenced", "var(--blue-light)"]].forEach(function (s) {
-        if (r[s[0]] <= 0) return;
+      bars.setAttribute("aria-label", r.channel + ": " + formatINR(r.sourced));
+      if (r.sourced > 0) {
         const bar = el("div", "rp-attr-bar");
-        bar.style.width = (r[s[0]] / max * 100) + "%";
-        bar.style.background = s[1];
+        bar.style.width = (r.sourced / max * 100) + "%";
+        bar.style.background = "var(--blue)";
         bars.appendChild(bar);
-      });
-      row.append(el("span", "rp-attr-label", r.channel), bars,
-        el("span", "rp-attr-value", formatINR(r.sourced) + " / " + formatINR(r.influenced)));
+      }
+      row.append(el("span", "rp-attr-label", r.channel), bars, el("span", "rp-attr-value", formatINR(r.sourced)));
       fragment.appendChild(row);
     });
-    fragment.appendChild(legend([
-      { label: "Sourced", color: "var(--blue)" },
-      { label: "Influenced (180 days)", color: "var(--blue-light)" }
-    ], "rp-legend" + (legendClass ? " " + legendClass : "")));
+    const total = rows.reduce(function (t, r) { return t + r.sourced; }, 0);
+    const sumRow = el("div", "rp-attr-row rp-attr-total");
+    sumRow.dataset.check = "channel-total";
+    sumRow.dataset.total = total;
+    sumRow.append(el("span", "rp-attr-label", "Total"), el("div", "rp-attr-bars"), el("span", "rp-attr-value", formatINR(total)));
+    fragment.appendChild(sumRow);
+    fragment.appendChild(legend([{ label: "Confirmed amount, by source channel", color: "var(--blue)" }],
+      "rp-legend" + (legendClass ? " " + legendClass : "")));
     return fragment;
   }
 
@@ -260,6 +330,14 @@ window.App = (function () {
     try {
       const data = await Data.loadData(state);
       if (renderTokens[id] !== token) return; // a newer filter change superseded this one
+      if (data.failed) {
+        // A failed read is never shown as zero.
+        stale.add(id);
+        const box = el("div", "placeholder", "Could not load CRM data. Every figure is hidden until it loads. Use refresh to try again.");
+        if (data.reason) box.appendChild(el("p", "ov-muted", "Reason: " + data.reason));
+        panel.replaceChildren(box);
+        return;
+      }
       tab.render(data, state);
       Checks.run(id, data, state);
       document.getElementById("last-updated").textContent =
@@ -366,6 +444,7 @@ window.App = (function () {
       renderTab(activeTab);
     });
     document.getElementById("refresh-btn").addEventListener("click", function () {
+      Data.reset();
       Object.keys(PAGE_NAMES).forEach(function (id) { stale.add(id); });
       renderTab(activeTab);
     });
@@ -386,6 +465,8 @@ window.App = (function () {
     switchTab: switchTab,
     coql: coql,
     getRelatedRecords: getRelatedRecords,
+    allRecords: allRecords,
+    stageValues: stageValues,
     fetchWithFallback: fetchWithFallback,
     formatINR: formatINR,
     formatINRFull: formatINRFull,
@@ -398,6 +479,10 @@ window.App = (function () {
     pill: pill,
     sparkline: sparkline,
     legend: legend,
-    attributionBars: attributionBars
+    attributionBars: attributionBars,
+    periodText: periodText,
+    optionText: optionText,
+    optionSwitch: optionSwitch,
+    splitLine: splitLine
   };
 })();

@@ -13,6 +13,13 @@
       type: 'Type', leadSource: 'Lead_Source', campaign: 'Campaign_Source', description: 'Description'
     },
 
+    // Amount of each service: name in the services list -> field API name in Deals
+    serviceAmounts: {
+      'Accounting Services': 'Accounting_Services_Amount', 'Audit Support Services': 'Audit_Support_Services_Amount', 'Bookkeeping Services': 'Bookkeeping_Services_Amount',
+      'Mortgage Services': 'Mortgage_Services_Amount', 'Paraplanning Services': 'Paraplanning_Services_Amount', 'Payroll Services': 'Payroll_Services_Amount',
+      'Tax Services': 'Tax_Services_Amount', 'Virtual Admin Services': 'Virtual_Admin_Services_Amount'
+    },
+
     // ASSUMPTION: there is no timeline field in Deals, so the closing date is used as the timeline
     timeline: 'Closing_Date',
 

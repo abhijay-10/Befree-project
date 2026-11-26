@@ -3,7 +3,7 @@
   const C = window.BefreeConfig, R = window.BefreeRules;
   const inCrm = window.self !== window.top && C.mode !== 'demo';
   const db = inCrm ? window.BefreeCrm : window.BefreeSample;
-  const ui = { id: null, user: C.users[0], form: null, msg: null, bad: false, busy: false, allTouches: false, list: null, rail: false, service: 'all', status: 'all', listError: null, tab: 'activity', edit: false, draft: null, noteDraft: null, users: null, ai: null, aiClosed: null, dup: null, conv: null, convDraft: null };
+  const ui = { heats: null, id: null, user: C.users[0], form: null, msg: null, bad: false, busy: false, allTouches: false, list: null, rail: false, status: 'all', tab: 'activity', edit: false, draft: null, noteDraft: null, users: null, ai: null, aiClosed: null, dup: null, conv: null, convDraft: null };
   let V = null;
 
   const $ = s => document.querySelector(s);
@@ -44,22 +44,20 @@
   // Each step is read from the record. Nothing is assumed.
   function journey() {
     const firstOf = (list, key) => list.map(x => x[key]).sort((a, b) => R.toDate(a) - R.toDate(b))[0];
-    const accepted = V.meetings.filter(m => m.outcome === 'Accepted');
+    const accepted = V.meetings.filter(m => m.outcome === 'Accepted'), last = R.latestMeeting(V);
+    const byInvite = !accepted.length && R.inviteAccepted(last) ? last.reply === 'accepted' ? 'Client accepted' : 'Invitation sent' + (last.invitedOn ? ' ' + date(last.invitedOn) : '') : null;
     const raised = V.isLead ? V.deals.length > 0 : ['Opportunity', 'Customer'].includes(V.contact.lifecycle);
-    const own = V.touches.filter(t => t.contactId === V.contact.id);
     const steps = [
       ['Lead created', true, V.created],
       ['Owner assigned', !!V.account.owner, null, V.account.owner],
-      ['Engaged', own.length > 0, firstOf(own, 'date')],
       ['Meeting booked', V.meetings.length > 0, firstOf(V.meetings, 'start')],
-      ['Meeting accepted', accepted.length > 0, firstOf(accepted, 'start')],
+      ['Meeting accepted', R.meetingAccepted(V), firstOf(accepted, 'start'), byInvite],
       ['Deal raised', raised]
     ];
-    // No next step for a lead we may not or should not work. Engaged is unknown until Touches exists.
+    // No next step for a lead we may not or should not work.
     const stopped = R.isOptedOut(V.contact) || /lost|junk|not qualified/i.test(V.contact.status || '');
-    const unknown = i => i === 2 && missing('touches');
-    const next = stopped ? -1 : steps.findIndex((s, i) => !s[1] && !unknown(i));
-    return '<ol class="journey" aria-label="Lead journey">' + steps.map(([label, done, when, note], i) => `<li class="${done ? 'done' : i === next ? 'next' : ''}"><span class="dot">${done ? icon('tick') : i + 1}</span><b>${label}</b><small>${done ? esc(note || (when ? date(when) : 'Done')) : i === next ? 'Next step' : unknown(i) ? 'No data yet' : 'Not yet'}</small></li>`).join('') + '</ol>';
+    const next = stopped ? -1 : steps.findIndex(s => !s[1]);
+    return '<ol class="journey" aria-label="Lead journey">' + steps.map(([label, done, when, note], i) => `<li class="${done ? 'done' : i === next ? 'next' : ''}"><span class="dot">${done ? icon('tick') : i + 1}</span><b>${label}</b><small>${done ? esc(note || (when ? date(when) : 'Done')) : i === next ? 'Next step' : 'Not yet'}</small></li>`).join('') + '</ol>';
   }
   function scale(value) {
     return '<div class="scale" aria-hidden="true">' + ['Cold', 'Warm', 'Hot'].map(x => `<span class="${x.toLowerCase()} ${x === value ? 'on' : ''}"><i></i>${x}</span>`).join('') + '</div>';
@@ -71,32 +69,16 @@
     return '<ul class="faces">' + show.map(c => `<li class="${on.has(c.id) ? 'on' : ''}" title="${esc(c.name)}: ${on.has(c.id) ? 'engaged' : 'not engaged'}">${esc(initials(c.name))}</li>`).join('') + (list.length > 7 ? `<li>+${list.length - 7}</li>` : '') + '</ul>';
   }
   const allLeads = () => db.live ? ui.list : db.list(ui.user);
-  const inService = c => ui.service === 'all' || (ui.service === 'none' ? !c.services.length : c.services.includes(ui.service.slice(2)));
 
-  // Counts of leads per service. In the web tab a tile also filters the lead list.
-  function servicesPanel() {
-    const box = $('#services');
-    if (!box) return;
-    box.hidden = !V.service;
-    if (!V.service) return;
-    const head = text => `<div class="svc-head"><h2>${icon('tag')}Services</h2><p class="mute">${text}</p></div>`;
-    if (!V.service.field && V.service.unread) { box.innerHTML = `<section>${head('')}<p class="note bad">Could not read the Leads fields from CRM. ${esc(V.service.unread)}</p></section>`; return; }
-    if (!V.service.field && C.lead.service) { box.innerHTML = `<section>${head('')}<p class="note bad">The field ${esc(C.lead.service)} was not found in Leads. Check its API name and that your profile can see it.</p></section>`; return; }
-    if (!V.service.field) { box.innerHTML = `<section>${head('')}<p class="setup"><b>No service field in Leads yet</b>Add a pick list field labelled Service to the Leads module. The counts then appear here.</p></section>`; return; }
-    if (ui.listError) { box.innerHTML = `<section>${head('')}<p class="note bad">Could not count services. ${esc(ui.listError)}</p></section>`; return; }
-    const list = allLeads();
-    if (!list) { box.innerHTML = `<section>${head('Counting leads')}</section>`; return; }
-    const s = R.countServices(list, V.service.options);
-    const tile = (key, label, count) => {
-      const pct = s.total ? Math.round(count / s.total * 100) : 0;
-      const body = `<span class="svc-name">${esc(label)}</span><span class="svc-bar"><i style="width:${pct}%"></i></span><b>${count}</b><small>${pct}%</small>`;
-      const cls = key === 'none' ? 'svc-row none' : 'svc-row';
-      return ui.rail || !db.live ? `<button class="${cls}" data-svc="${esc(key)}" aria-pressed="${ui.service === key}" title="Show these leads">${body}</button>` : `<div class="${cls}">${body}</div>`;
-    };
-    const none = s.total - s.chosen;
-    box.innerHTML = `<section>${head(`${s.chosen} of ${list.partial ? 'the first ' : ''}${s.total} leads have chosen a service`)}<div class="svc-list">` +
-      s.rows.map(r => tile('s:' + r.name, r.name, r.count)).join('') + tile('none', 'No service yet', none) + '</div>' +
-      (ui.service === 'all' ? '' : '<button class="link" data-svc="all">Show all leads</button>') + '</section>';
+  // Only the services of this lead
+  function servicesBlock() {
+    if (!V.service) return '';
+    const now = V.contact.services || [], card = (text, body) => `<section><div class="svc-head"><h2>${icon('tag')}Services</h2><p class="mute">${text}</p></div>${body}</section>`;
+    if (!V.service.field && V.service.unread) return card('', `<p class="note bad">Could not read the Leads fields from CRM. ${esc(V.service.unread)}</p>`);
+    if (!V.service.field && C.lead.service) return card('', `<p class="note bad">The field ${esc(C.lead.service)} was not found in Leads. Check its API name and that your profile can see it.</p>`);
+    if (!V.service.field) return card('', '<p class="setup"><b>No service field in Leads yet</b>Add a pick list field labelled Service to the Leads module. The services then appear here.</p>');
+    if (!now.length) return card('', '<p class="mute">No service chosen for this lead yet.</p>');
+    return card(`${now.length} ${now.length === 1 ? 'service' : 'services'} on this lead`, '<ul class="ai-list good-list">' + now.map(x => `<li>${icon('tick')}<span>${esc(x)}</span></li>`).join('') + '</ul>');
   }
   function serviceForm() {
     const s = V.service, now = V.contact.services || [];
@@ -175,9 +157,60 @@
       <div><dt>Owner</dt><dd>${esc(a.owner || 'Unassigned')}</dd></div>${V.service && V.service.field ? `<div><dt>Service</dt><dd>${esc((c.services || []).join(', ') || 'Not chosen')}</dd></div>` : ''}<div><dt>${c.status !== undefined && !c.lifecycle ? 'Lead status' : 'Lifecycle'}</dt><dd>${esc(c.lifecycle || c.status || 'Not set')}</dd></div></dl></header>`;
   }
   function temperatureBlock(t) {
+    if (missing('touches') && V.isLead) return savedHeatBlock();
     if (missing('touches')) return block('Temperature', scale() + '<p class="mute">Waiting for engagement data</p>', 'waiting');
     if (V.problems.touches) return block('Temperature', problem('touches'));
     return block('Temperature', `<p class="big">${t.value}</p>${scale(t.value)}<p>${esc(t.reason)}</p>`, 'is-' + t.value.toLowerCase());
+  }
+  // Temperature worked out by the AI summary function, with the number of open leads in each
+  function savedHeatBlock() {
+    const h = heatNow(), d = h.details, n = ui.heats;
+    const points = (list, cls, mark) => list.length ? `<ul class="ai-list ${cls}">` + list.map(x => `<li>${icon(mark)}<span>${esc(x)}</span></li>`).join('') + '</ul>' : '';
+    const host = u => u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+    const links = d ? d.sources.filter((x, i, all) => all.findIndex(y => host(y.url) === host(x.url)) === i).slice(0, 4) : [];
+    let body = h.value ? `<p class="big">${h.value}</p>${scale(h.value)}` : scale();
+    if (!h.value) body += '<p class="mute">Not checked yet. Click AI summary.</p>';
+    if (d && d.judged) body += `<p>Score ${Number(d.score) || 0} of 100</p><p class="mute">Confidence: ${esc(d.confidence)}${d.at ? '. Updated ' + time(d.at) : ''}</p>`;
+    if (d) body += points(d.good, 'good-list', 'tick') + points(d.bad, 'bad-list', 'alert');
+    if (links.length) body += `<p class="mute">Sources: ${links.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(host(x.url))}</a>`).join(', ')}</p>`;
+    if (V.heatField && n) body += `<div class="heat-count"><p class="mute">All open leads</p>${['Hot', 'Warm', 'Cold'].map(x => `<span class="${x.toLowerCase()}"><b>${n[x]}</b>${x}</span>`).join('')}${n['Not enough data'] + n.none ? `<p class="mute">${[[n['Not enough data'], 'not enough data'], [n.none, 'not checked yet']].filter(x => x[0]).map(x => x.join(' ')).join(', ')}</p>` : ''}</div>`;
+    if (V.heatField && d && d.saved === false) body += `<p class="setup"><b>Not saved in CRM</b>Check the pick list values of ${esc(C.ai.temperatureField)}.</p>`;
+    if (!V.heatField) body += `<p class="setup"><b>Not saved in CRM</b>Create the field ${esc(C.ai.temperatureField)} in Leads to keep and count it.</p>`;
+    return block('Temperature', body, h.value && h.value !== 'Not enough data' ? 'is-' + h.value.toLowerCase() : 'waiting');
+  }
+  // The newest saved details: from CRM, or from this browser
+  function heatNow() {
+    let local = '';
+    try { local = localStorage.getItem(aiKey(V)); } catch (e) { /* browser storage is blocked */ }
+    const d = [V.aiSaved, local].map(text => { try { const x = JSON.parse(text); return x.temperature ? { ...x.temperature, at: x.at } : null; } catch (e) { return null; } })
+      .concat(V.heatDetails || []).filter(Boolean).sort((a, b) => new Date(b.at) - new Date(a.at))[0];
+    return R.savedTemperature(V.heat, V.heatField && !V.heat ? null : d, V.contact.optedOut, V.contact.status);
+  }
+  // Redraws only this card, so typing elsewhere on the page is not lost
+  function drawHeat() {
+    const box = $('#heat');
+    if (box && V && V.isLead && missing('touches')) box.innerHTML = savedHeatBlock();
+  }
+  // After an AI summary. If it failed, CRM may still have a new temperature, saved before OpenAI was asked.
+  async function newHeat(v, raw) {
+    if (!v.live || !v.isLead) return;
+    if (raw && raw.temperature) Object.assign(v, { heat: raw.temperature.value, heatDetails: { ...raw.temperature, at: new Date().toISOString() } });
+    else try { v.heat = await db.temperature(v); } catch (e) { return; }
+    const item = (ui.list || ui.heatList || []).find(x => x.id === v.contact.id);
+    if (item) item.temperature = v.heat;
+    if (V !== v) return; // another lead was picked meanwhile
+    drawHeat();
+    countHeats();
+  }
+  async function countHeats() {
+    if (!V || !V.live || !V.isLead || !V.heatField || !missing('touches')) return;
+    if (!ui.list && !ui.heatList) {
+      try { ui.heatList = await db.leads(); } catch (e) { return; } // the card works without the counts
+    }
+    const list = ui.list || ui.heatList, item = list.find(x => x.id === V.contact.id);
+    if (item) Object.assign(item, { temperature: V.heat, status: V.contact.status, optedOut: V.contact.optedOut });
+    ui.heats = R.countTemperatures(list);
+    drawHeat();
   }
   function engagementBlock() {
     if (missing('touches')) return block('Account engagement', faces() + '<p class="mute">Waiting for engagement data</p>', 'waiting');
@@ -203,6 +236,10 @@
     if (!m) return block('Meeting status', '<p class="mute">No meeting booked.</p>');
     let h = `<p>${time(m.start)} ${m.selfBooked ? pill('Self-booked', 'hot') : ''}</p>`;
     if (state === 'upcoming') h += '<p>Upcoming</p>';
+    if (V.isLead || !V.live) {
+      const said = { accepted: ['Client accepted', 'good'], declined: ['Client declined', 'bad'], tentative: ['Client replied maybe', 'warm'] }[m.reply];
+      h += `<p>${m.invited ? pill(said ? said[0] : 'Invitation sent', said ? said[1] : 'good') + (m.invitedOn ? ` <span class="mute">${date(m.invitedOn)}</span>` : '') : '<span class="mute">Invitation not sent</span>'}</p>`;
+    }
     if (missing('outcome')) return block('Meeting status', h + (state === 'upcoming' ? '' : notSetUp('a Meeting Outcome field')));
     if (state === 'done') h += `<p><b>${esc(m.outcome)}</b>${m.reason ? ': ' + esc(m.reason) : ''}</p>`;
     if (state === 'due' || state === 'overdue') {
@@ -233,22 +270,20 @@
     return block('Linked deals', ds.length ? '<ul class="deals">' + ds.map(d => `<li><span>${link(C.modules.deal, d.id, d.name)}</span><span class="mute">${esc(d.stage || 'Converted')}${d.stage in C.stages ? ', ' + C.stages[d.stage] + '%' : ''}</span></li>`).join('') + '</ul>' : `<p class="mute">${none}</p>`);
   }
   function actions() {
-    const out = R.isOptedOut(V.contact), ok = R.canRaiseDeal(V), m = R.latestMeeting(V), state = R.meetingState(m, V.now);
-    const pending = state === 'upcoming' || (!missing('outcome') && (state === 'due' || state === 'overdue'));
+    const out = R.isOptedOut(V.contact), ok = V.live && !V.isLead ? R.canRaiseDeal(V) : R.meetingAccepted(V), m = R.latestMeeting(V), state = R.meetingState(m, V.now);
+    const pending = (state === 'upcoming' && m.reply !== 'declined') || (!missing('outcome') && (state === 'due' || state === 'overdue'));
     const b = [];
     const add = (action, attr, text, off, cls) => { if (R.can(V.user, action)) b.push(`<button ${attr} class="${cls || ''}" ${off || ui.busy ? 'disabled' : ''}>${text}</button>`); };
     add('book', 'data-show="book"', icon('calendar') + 'Book meeting', out || pending || !!V.problems.meetings);
     if (!V.live || V.isLead) add('ai', 'data-do="ai" id="aiButton"', icon('spark') + 'AI summary', !!ui.ai && ui.ai.state === 'loading', 'ai');
     add('email', 'data-do="email"', icon('mail') + 'Send email', out);
     add('call', 'data-do="call"', icon('phone') + 'Add call task', out);
-    add('raise', 'data-do="raise"', icon('deal') + 'Raise deal', !ok, 'primary');
-    // Hidden until the duplicate check finds a match (see C.convert.show)
-    if (!V.live || V.isLead) add('convert', 'data-do="convert" id="convertButton"' + (showConvert() ? '' : ' hidden'), icon('deal') + 'Convert to deal');
+    add('raise', 'data-do="raise"', icon('deal') + 'Convert to Deal', !ok, 'primary');
     if (V.live) b.push(`<button data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}Open in CRM</button>`);
     add('optOut', 'data-show="optout"', icon('stop') + 'Opt out', out, 'quiet');
     const notes = [];
     if (out) notes.push('Opted out: email, call tasks and meeting booking are blocked.');
-    if (R.can(V.user, 'raise') && !ok) notes.push(missing('outcome') ? 'Raise deal needs an Accepted meeting. The Meeting Outcome field is not set up yet.' : 'Raise deal unlocks after an Accepted meeting.');
+    if (R.can(V.user, 'raise') && !ok) notes.push(V.live && !V.isLead || !C.acceptOnInvite ? 'Convert to Deal unlocks after an Accepted meeting.' : !m || state === 'done' ? 'Convert to Deal unlocks after you book a meeting and send the invitation.' : m.reply === 'declined' ? 'The client declined the invitation. Book a later meeting and send its invitation to unlock Convert to Deal.' : 'Click Send email to send the meeting invitation. Convert to Deal then unlocks.');
     if (V.live && V.user.role === 'View only') notes.push(`The CRM profile "${esc(V.user.profile || 'unknown')}" is not matched to a Befree role in config.js.`);
     if (V.service && V.service.notFound && V.service.notFound.length && V.user.role === 'Admin') notes.push('These API names in config.js are not in your Leads module: ' + esc(V.service.notFound.join(', ')) + '.');
     return `<div class="actions">${b.join('') || '<span class="mute">View only</span>'}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
@@ -279,14 +314,13 @@
   function drawDup() {
     const box = $('#dup'), d = ui.dup && ui.dup.id === ui.id ? ui.dup.data : null;
     if (!box) return;
-    if ($('#convertButton')) $('#convertButton').hidden = !showConvert();
     if (!d) { box.innerHTML = ''; return; }
     const names = (entity, list) => list.slice(0, 3).map(x => link(entity, x.id, x.name) + (x.by ? ` (${x.by})` : '')).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
     const line = (cls, title, text) => `<p class="note ${cls}">${icon('alert')}<span><b>${title}</b> ${text}</span></p>`;
     const out = [];
     if (d.contacts.length) out.push(line('bad', 'Email already exists.', `${esc(d.email)} is already used by ${d.contacts.length === 1 ? 'the contact' : 'the contacts'} ${names(C.modules.contact, d.contacts)}.`));
     if (d.leads.length) out.push(line('bad', 'Email already exists.', `${esc(d.email)} is also on ${d.leads.length === 1 ? 'the lead' : d.leads.length + ' other leads:'} ${names('Leads', d.leads)}.`));
-    if (d.accounts.length) out.push(line('warm-note', 'Company already exists.', `Account: ${names(C.modules.account, d.accounts)}. Use Convert to deal to add this lead to it.`));
+    if (d.accounts.length) out.push(line('warm-note', 'Company already exists.', `Account: ${names(C.modules.account, d.accounts)}. Use Convert to Deal to add this lead to it.`));
     if (d.failed.length) out.push(`<p class="hint dup-off">Duplicates could not be checked in: ${esc(d.failed.join(', '))}.</p>`);
     box.innerHTML = out.join('');
   }
@@ -310,8 +344,8 @@
     return h;
   }
   async function keepAi(v, raw, at) {
-    const { verdict, evidence, summary, for_deal, concerns, next_step } = raw;
-    const text = JSON.stringify({ at: at.toISOString(), mark: aiMark(v), answer: { verdict, evidence, summary, for_deal, concerns, next_step } });
+    const { verdict, evidence, summary, for_deal, concerns, next_step, temperature } = raw;
+    const text = JSON.stringify({ at: at.toISOString(), mark: aiMark(v), answer: { verdict, evidence, summary, for_deal, concerns, next_step }, ...(temperature ? { temperature } : {}) });
     let where = '';
     v.aiSaved = text;
     try { localStorage.setItem(aiKey(v), text); where = 'browser'; } catch (e) { /* browser storage is blocked */ }
@@ -346,6 +380,7 @@
       raw = await db.summarize(v);
       Object.assign(job, { data: R.checkSummary(v, raw), at: new Date(), state: 'done' });
     } catch (e) { Object.assign(job, { state: 'error', error: e.message || 'The summary could not be made.' }); }
+    newHeat(v, raw);
     const saving = job.state === 'done' ? keepAi(v, raw, job.at) : null; // kept even if another lead was picked meanwhile
     if (ui.ai === job && $('#ai')) {
       drawAi();
@@ -356,38 +391,48 @@
     if (ui.ai === job && $('#ai')) drawAi();
   }
   const dupData = () => ui.dup && ui.dup.id === ui.id ? ui.dup.data : null;
-  const showConvert = () => { const d = dupData(); return C.convert.show === 'always' || !!d && !!(d.accounts.length || d.contacts.length || d.leads.length); };
+  // The same choices as CRM's own Convert Lead page
   function convertForm() {
     const c = ui.conv, d = ui.convDraft || {};
-    const select = (name, label, list, blank) => `<label>${label}<select name="${name}"><option value="">${blank}</option>${list.map(x => `<option value="${esc(x.id)}" ${x.id === d[name] ? 'selected' : ''}>${esc(x.text)}</option>`).join('')}</select></label>`;
-    const others = c.leadCount ? `<p class="mute">${c.leadCount === 1 ? '1 other lead has' : c.leadCount + ' other leads have'} this email. Only this lead is converted.</p>` : '';
-    return `<form class="panel" data-form="convert" novalidate><p><b>Convert ${esc(V.contact.name)} to a deal</b></p><div class="fields">
-      <label>Deal name<input name="dealName" maxlength="120" value="${esc(d.dealName)}" required></label>
-      <label>Stage<select name="stage">${c.stages.map(s => `<option ${s === d.stage ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-      <label>Closing date<input type="date" name="closingDate" value="${esc(d.closingDate)}" required></label>
-      <label>Amount (optional)<input type="number" name="amount" min="0" step="any" value="${esc(d.amount)}"></label>
-      ${select('accountId', 'Account', c.accounts.map(a => ({ id: a.id, text: a.name + (a.by ? ' (' + a.by + ')' : '') })), 'Create new account')}
-      ${select('contactId', 'Contact', c.contacts.map(x => ({ id: x.id, text: x.name })), 'Create new contact')}</div>
-      <p class="mute">This cannot be undone. The lead leaves the Leads list. Existing account and contact details are not overwritten.</p>${others}
-      <button class="primary">Convert lead</button> <button type="button" data-do="cancel">Cancel</button></form>`;
+    const select = (name, label, list, blank) => `<label>${label}<select name="${name}">${blank === null ? '' : `<option value="">${blank}</option>`}${list.map(x => `<option value="${esc(x.id)}" ${x.id === d[name] ? 'selected' : ''}>${esc(x.text)}</option>`).join('')}</select></label>`;
+    const named = list => list.map(x => ({ id: x.id, text: x.name }));
+    const notes = [];
+    if (c.leadCount) notes.push(`${c.leadCount === 1 ? '1 other lead has' : c.leadCount + ' other leads have'} this email. Only this lead is converted.`);
+    if (c.failed.length) notes.push('Duplicates could not be checked in: ' + esc(c.failed.join(', ')) + '. Check in CRM that this account and contact do not exist yet.');
+    if (!c.roles) notes.push('Contact roles could not be read. Set the role on the deal in CRM.');
+    return `<form class="panel" data-form="convert" novalidate><p><b>Convert ${esc(V.contact.name)}</b></p>
+      <div class="fields">${select('accountId', 'Account', c.accounts.map(a => ({ id: a.id, text: a.name + (a.by ? ' (' + a.by + ')' : '') })), 'Create new account')}
+      ${select('contactId', 'Contact', named(c.contacts), 'Create new contact')}
+      ${c.users ? select('ownerId', 'Owner of the new records', named(c.users), null) : ''}</div>
+      <label class="tick"><input type="checkbox" name="createDeal" ${d.createDeal ? 'checked' : ''}> Create a new deal for this account</label>
+      <div class="fields" id="convDeal" ${d.createDeal ? '' : 'hidden'}>
+      <label>Amount<input type="number" name="amount" min="0" step="any" value="${esc(d.amount)}"></label>
+      <label>Deal name *<input name="dealName" maxlength="120" value="${esc(d.dealName)}"></label>
+      <label>Closing date *<input type="date" name="closingDate" value="${esc(d.closingDate)}"></label>
+      <label>Stage *<select name="stage">${c.stages.map(s => `<option ${s === d.stage ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+      ${select('campaignId', 'Campaign source', named(c.campaigns), 'None')}
+      ${c.roles ? select('contactRole', 'Contact role', named(c.roles), 'None') : ''}</div>
+      <p class="mute">This cannot be undone. The lead leaves the Leads list. Existing account and contact details are not overwritten.</p>${notes.map(n => `<p class="mute">${n}</p>`).join('')}
+      <button class="primary">Convert</button> <button type="button" data-do="cancel">Cancel</button></form>`;
   }
   async function openConvert() {
     if (ui.busy) return;
     const id = ui.id, v = V;
-    let stages, dup;
+    let stages, dup, roles, campaigns, users;
+    ui.busy = true;
     try {
-      [stages, dup] = await Promise.all([db.dealStages(), dupData() || db.duplicates(v)]);
-    } catch (e) { return say(e.message || 'The conversion form could not be opened.', true); }
+      [stages, dup, roles, campaigns, users] = await Promise.all([db.dealStages(), dupData() || db.duplicates(v), db.contactRoles(), db.campaigns(),
+        R.can(v.user, 'owner') ? db.users().catch(() => null) : null]);
+    } catch (e) { ui.busy = false; return say(e.message || 'The conversion form could not be opened.', true); }
+    ui.busy = false;
     if (id !== ui.id || v !== V) return;
-    // A failed check could hide an existing record and lead to a second copy of it
-    if (dup.failed.length) return say('Not opened. Duplicates could not be checked in: ' + dup.failed.join(', ') + '. Reload the lead and try again.', true);
-    const choices = R.convertChoices(dup);
-    const later = new Date(Date.now() + 30 * 86400000), two = n => String(n).padStart(2, '0');
+    const choices = R.convertChoices(dup), owner = v.account.ownerId || v.account.owner;
+    if (users && owner && !users.some(u => u.id === owner)) users = [{ id: owner, name: v.account.owner }].concat(users);
     keep();
-    ui.conv = { ...choices, stages, leadCount: dup.leads.length };
+    ui.conv = { ...choices, stages, roles, campaigns, users, failed: dup.failed, leadCount: dup.leads.length };
     ui.convDraft = {
-      dealName: (v.account.name === 'No company' ? v.contact.name : v.account.name).slice(0, 120), stage: stages[0], amount: '',
-      closingDate: `${later.getFullYear()}-${two(later.getMonth() + 1)}-${two(later.getDate())}`, accountId: choices.accountId, contactId: choices.contactId
+      createDeal: 'on', dealName: (v.account.name === 'No company' ? v.contact.name : v.account.name).slice(0, 120), stage: stages[0], amount: '', closingDate: '',
+      campaignId: '', contactRole: '', ownerId: owner || '', accountId: choices.accountId, contactId: choices.contactId
     };
     ui.form = 'convert';
     ui.msg = null;
@@ -396,9 +441,11 @@
   // Not run(): a converted lead cannot be loaded again
   async function convert(f) {
     if (ui.busy) return;
+    if (!R.meetingAccepted(V)) return say('Send the meeting invitation first.', true);
     const err = R.checkConvert(f, ui.conv);
     if (err) return say(err, true);
     const v = V, id = ui.id;
+    keep();
     ui.busy = true;
     document.querySelectorAll('#app button').forEach(b => { b.disabled = true; });
     let made;
@@ -409,12 +456,19 @@
     if (ui.list) ui.list = ui.list.filter(c => c.id !== id);
     Object.assign(ui, { busy: false, id: null, form: null, msg: null, conv: null, convDraft: null, dup: null, ai: null, edit: false, draft: null, noteDraft: null });
     const open = (entity, recordId, text) => v.live && recordId ? `<button data-entity="${esc(entity)}" data-record="${esc(recordId)}">${icon('out')}${text}</button>` : '';
-    const result = made.dealId ? `${v.contact.name} is converted. Deal "${f.dealName.trim()}" was created.` : `${v.contact.name} is converted, but CRM did not return a deal. Check the account in CRM.`;
-    $('#app').innerHTML = `<div class="hero"><div class="actions">${open(C.modules.deal, made.dealId, 'Open deal')}${open(C.modules.account, made.accountId, 'Open account')}${open(C.modules.contact, made.contactId, 'Open contact')}</div></div><p class="note ${made.dealId ? 'good' : 'bad'}" role="status">${esc(result)}</p>`;
+    const missed = f.createDeal && !made.dealId;
+    const result = missed ? `${v.contact.name} is converted, but CRM did not return a deal. Check the account in CRM.`
+      : f.createDeal ? `${v.contact.name} is converted. Deal "${f.dealName.trim()}" was created.` : `${v.contact.name} is converted to an account and contact, without a deal.`;
+    const role = made.dealId && f.contactRole && !made.roleSet ? '<p class="note warm-note">The contact role could not be confirmed. Check Contact Roles on the deal in CRM.</p>' : '';
+    $('#app').innerHTML = `<div class="hero"><div class="actions">${open(C.modules.deal, made.dealId, 'Open deal')}${open(C.modules.account, made.accountId, 'Open account')}${open(C.modules.contact, made.contactId, 'Open contact') || (v.live ? '' : '<span class="mute">Sample data</span>')}</div></div><p class="note ${missed ? 'bad' : 'good'}" role="status">${esc(result)}</p>${role}`;
     rail();
   }
   function form() {
     if (ui.form === 'convert' && ui.conv) return convertForm();
+    if (ui.form === 'invite') {
+      const m = R.latestMeeting(V);
+      return `<div class="panel"><p><b>Send the meeting invitation${m.invited ? ' again' : ''}?</b></p><p>To ${esc(V.contact.name)} (${esc(V.contact.email)}), for the meeting on ${time(m.start)}.</p><p class="mute">CRM emails the client an invitation and adds them to the meeting.</p><button class="primary" data-do="invite">Send invitation</button> <button data-do="cancel">Cancel</button></div>`;
+    }
     if (ui.form === 'optout') return `<div class="panel"><p>Opt out ${esc(V.contact.name)}? Emails and call tasks will be blocked.</p><button class="primary" data-do="optout">Yes, opt out</button> <button data-do="cancel">Cancel</button></div>`;
     if (ui.form === 'book' || ui.form === 'resched') return `<form class="panel" data-form="${ui.form}"><label>${ui.form === 'book' ? 'Meeting' : 'New meeting'} date and time<input type="datetime-local" name="start" required></label><button class="primary">${ui.form === 'book' ? 'Book meeting' : 'Reschedule'}</button> <button type="button" data-do="cancel">Cancel</button></form>`;
     return '';
@@ -428,12 +482,12 @@
     rail();
     const t = R.temperature(V);
     $('#app').innerHTML = '<div class="hero' + (ui.shown === ui.id ? '' : ' enter') + '">' + header() + journey() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
-      '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats">' + temperatureBlock(t) + engagementBlock() + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
-      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div><div id="services"></div></div><div class="stack">' + detailBlock() + dealBlock() + '</div></div>';
+      '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats"><div id="heat">' + temperatureBlock(t) + '</div>' + engagementBlock() + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
+      '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + '</div></div>';
     ui.shown = ui.id;
-    servicesPanel();
     drawDup();
     drawAi();
+    countHeats();
   }
   // Lead list: sample data, or the web tab where no record is open
   function rail() {
@@ -450,7 +504,7 @@
     }
     $('#status').value = ui.status;
     const q = $('#find').value.trim().toLowerCase();
-    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && inService(c) && (ui.status === 'all' || c.status === ui.status));
+    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && (ui.status === 'all' || c.status === ui.status));
     const view = shown.slice(0, 200);
     const key = view.map(c => c.id + c.name + c.sub).join();
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
@@ -474,11 +528,11 @@
     render();
     checkDup();
   }
-  async function run(work, msg) {
+  async function run(work, msg, failed) {
     if (ui.busy) return;
     ui.busy = true;
     document.querySelectorAll('#app button').forEach(b => { b.disabled = true; });
-    try { await work(); } catch (e) { return reload('Not saved. ' + (e.message || 'Unknown error'), true).catch(fail); }
+    try { await work(); } catch (e) { return reload((failed || 'Not saved. ') + (e.message || 'Unknown error'), true).catch(fail); }
     await reload(msg).catch(fail);
   }
   // Keep what the user has typed when the screen is redrawn
@@ -496,10 +550,11 @@
     if (e.target.id === 'user') {
       ui.user = C.users.find(u => u.id === e.target.value);
       const list = db.list(ui.user);
-      Object.assign(ui, { service: 'all', status: 'all', edit: false, draft: null, noteDraft: null, ai: null, aiClosed: null });
+      Object.assign(ui, { status: 'all', edit: false, draft: null, noteDraft: null, ai: null, aiClosed: null });
       if (!list.some(c => c.id === ui.id)) ui.id = list[0].id;
       reload();
     }
+    if (e.target.name === 'createDeal') $('#convDeal').hidden = !e.target.checked;
     if (e.target.id === 'status') { ui.status = e.target.value; rail(); }
     if (e.target.name === 'outcome') $('#reason').hidden = e.target.value !== 'Rejected';
   });
@@ -508,17 +563,9 @@
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
     const x = b.dataset, m = R.latestMeeting(V || { meetings: [] });
-    if (x.svc) {
-      ui.service = ui.service === x.svc ? 'all' : x.svc;
-      rail();
-      servicesPanel();
-      const again = document.querySelector(`#services [data-svc="${CSS.escape(x.svc)}"]`);
-      if (again) again.focus();
-      return;
-    }
     if (x.lead) {
       if (ui.busy || x.lead === ui.id) return;
-      Object.assign(ui, { id: x.lead, allTouches: false, edit: false, draft: null, noteDraft: null, ai: null, aiClosed: null });
+      Object.assign(ui, { id: x.lead, form: null, conv: null, convDraft: null, allTouches: false, edit: false, draft: null, noteDraft: null, ai: null, aiClosed: null });
       rail();
       $('#app').classList.add('loading');
       return reload().catch(fail);
@@ -535,6 +582,7 @@
         if (R.can(V.user, 'owner') && !ui.users) db.users().then(u => { ui.users = u; if (ui.edit) { keep(); render(); } }, () => { ui.users = null; });
         return;
       case 'ai':
+        if (V.live && V.isLead && V.heatField && !V.heat) return summarize(); // no temperature yet: an older summary is not enough
         if (ui.ai && ui.ai.state === 'done' && !ui.ai.old) return $('#ai').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         if (!ui.ai && V.contact.id === ui.id && restoreAi()) { // closed earlier: show it again
           ui.aiClosed = null;
@@ -554,9 +602,17 @@
       case 'optout': return run(() => db.optOut(V), V.contact.name + ' is opted out.');
       case 'call': return run(() => db.addCall(V), 'Call task added.');
       case 'toCold': return run(() => db.toCold(V, m), 'Returned to Cold after ' + C.maxReschedules + ' reschedules.');
-      case 'email': return say(V.live ? 'Use Send Email on this record in CRM.' : 'Sample only: the email would be sent from CRM.');
-      case 'convert': return openConvert();
-      case 'raise': return say('The deal form will come with the Deal widget.');
+      case 'email':
+        if (V.live && !V.isLead) return say('Use Send Email on this record in CRM.');
+        if (!V.contact.email) return say('This lead has no email address. Add it in Lead details first.', true);
+        if (!m || m.outcome) return say('Book a meeting first. Send email then sends its invitation.', true);
+        if (R.toDate(m.start) <= new Date()) return say('The meeting on ' + time(m.start) + ' has already started. Book a new meeting first.', true);
+        ui.form = 'invite';
+        return say(null);
+      case 'invite':
+        b.textContent = 'Sending, please wait';
+        return run(() => db.invite(V, m), 'Meeting invitation sent to ' + V.contact.email + '.', 'Invitation not confirmed. ');
+      case 'raise': return V.live && !V.isLead ? say('The deal form will come with the Deal widget.') : openConvert();
     }
   });
   document.addEventListener('submit', e => {
@@ -620,9 +676,5 @@
       ui.id = ui.list[0].id;
     }
     await reload();
-    if (db.live && !ui.rail && ui.id && V.service && V.service.field) { // lead page: count in the background
-      try { ui.list = await db.leads(); } catch (e) { ui.listError = e.message || 'Unknown error'; }
-      servicesPanel();
-    }
   })().catch(fail);
 })();

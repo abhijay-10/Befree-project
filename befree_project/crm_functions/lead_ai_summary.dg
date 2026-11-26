@@ -4,13 +4,52 @@ string standalone.lead_ai_summary(String lead_id)
 	// CRM variable used: openai_key
 	// 1. Reads the lead with its notes, meetings and tasks
 	// 2. OpenAI judges the deal interest from CRM, and researches the company if Website is filled
-	// 3. Fills the AI_ fields that exist in the Leads module, then returns the summary to the widget
+	// 3. Works out the temperature (Hot, Warm, Cold or Not enough data) with the fixed rules below and saves it in Lead_Temperature.
+	//    It is worked out once before OpenAI is called too, because Zoho may stop the function at 10 seconds.
+	// 4. Fills the AI_ fields that exist in the Leads module, then returns the summary to the widget
 	// The Email, Phone and Mobile fields are not sent to OpenAI.
 	// ---------- SETTINGS ----------
 	module_name = "Leads";
 	key_variable = "openai_key";
 	model = "gpt-6-luna";
 	api_url = "https://api.openai.com/v1/responses";
+	temperature_field = "Lead_Temperature";
+	back_to_cold_field = "Back_To_Cold_On";
+	self_booked_field = "Self_Booked";
+	// ---------- TEMPERATURE: all weights and limits ----------
+	s = Map();
+	s.put("hot",70);
+	s.put("warm",40);
+	// Fewer points than this that could be judged = Not enough data
+	s.put("min_judged",30);
+	s.put("medium_judged",60);
+	// Engagement (30)
+	s.put("meeting_max",12);
+	s.put("meeting_booked",8);
+	s.put("interest_max",10);
+	s.put("interest_possible",6);
+	s.put("service_max",8);
+	s.put("high_intent_days",30);
+	// Company fit (50)
+	s.put("size_max",20);
+	s.put("size_1000",16);
+	s.put("size_50",20);
+	s.put("size_10",12);
+	s.put("size_1",6);
+	s.put("industry_max",12);
+	s.put("industry_other",6);
+	s.put("need_max",10);
+	s.put("need_possible",5);
+	s.put("country_max",8);
+	s.put("country_other",2);
+	// Growth (20). A risk takes points away.
+	s.put("growth_max",12);
+	s.put("growth_some",8);
+	s.put("funding_max",8);
+	s.put("risk_serious",10);
+	s.put("risk_some",5);
+	target_industries = {"account","tax","bookkeep","financial plan","financial advis","wealth","mortgage"};
+	our_countries = {"AU","AUS","AUSTRALIA","UK","GB","UNITEDKINGDOM","GREATBRITAIN","ENGLAND","SCOTLAND","WALES","NORTHERNIRELAND","US","USA","UNITEDSTATES","UNITEDSTATESOFAMERICA"};
 	result = Map();
 	result.put("ok",false);
 	try
@@ -108,6 +147,8 @@ string standalone.lead_ai_summary(String lead_id)
 						meeting_row.put("title",ifnull(m.get("Event_Title"),"").toString());
 						meeting_row.put("start",m.get("Start_DateTime").toString());
 						meeting_row.put("outcome",ifnull(m.get("Meeting_Outcome"),"not recorded").toString());
+						meeting_row.put("booked",ifnull(m.get("Created_Time"),"").toString());
+						meeting_row.put("self_booked",ifnull(m.get(self_booked_field),"").toString());
 						meetings.add(meeting_row);
 					}
 				}
@@ -187,6 +228,14 @@ string standalone.lead_ai_summary(String lead_id)
 		web_guide = web_guide + "company_size: exactly one of 1-10 employees, 11-50 employees, 51-200 employees, 201-500 employees, 501-1000 employees, 1000+ employees, or empty. ";
 		web_guide = web_guide + "company_summary: 2 sentences. main_business: list separated by semicolons. headquarters: City, State, Country. ";
 		web_guide = web_guide + "sources: full URL of each page where you read these facts. ";
+		need_guide = "research is used to rate the lead. Use unknown, an empty text or 0 for anything without proof. ";
+		need_guide = need_guide + "service_need: clear, possible or none need for outsourced accounting, bookkeeping, payroll, tax, audit, paraplanning, mortgage or admin work, only with proof. service_detail: under 10 words. ";
+		need_guide = need_guide + "If the proof is in the CRM data, add a research source with fact service_need and url CRM. ";
+		web_guide = web_guide + need_guide;
+		web_guide = web_guide + "match: sure only if the website clearly belongs to this company, otherwise unsure with every other research fact unknown, empty or 0. ";
+		web_guide = web_guide + "employees_min and employees_max: the staff count as a range. growth: strong = several clear signs, some = one sign, such as hiring or expansion. ";
+		web_guide = web_guide + "funding: latest funding or revenue, under 10 words. risk: serious = insolvency, closure or large layoffs, some = a smaller warning. growth_detail and risk_detail: under 10 words. ";
+		web_guide = web_guide + "research sources: for each fact, the full URL of the page where you read it. A fact without a source is ignored. ";
 		// ---------- ANSWER FORMAT ----------
 		text_type = Map();
 		text_type.put("type","string");
@@ -218,6 +267,66 @@ string standalone.lead_ai_summary(String lead_id)
 		company_required_list = {"website","industry","headquarters","company_size","year_founded","company_summary","main_business","sources"};
 		company_type.put("required",company_required_list);
 		company_type.put("additionalProperties",false);
+		match_type = Map();
+		match_type.put("type","string");
+		match_list = {"sure","unsure"};
+		match_type.put("enum",match_list);
+		industry_type = Map();
+		industry_type.put("type","string");
+		industry_list = {"accounting","tax","bookkeeping","financial_planning","mortgage","other_business","not_a_business","unknown"};
+		industry_type.put("enum",industry_list);
+		country_type = Map();
+		country_type.put("type","string");
+		country_list = {"AU","UK","US","other","unknown"};
+		country_type.put("enum",country_list);
+		growth_type = Map();
+		growth_type.put("type","string");
+		growth_list = {"strong","some","unknown"};
+		growth_type.put("enum",growth_list);
+		risk_type = Map();
+		risk_type.put("type","string");
+		risk_list = {"serious","some","unknown"};
+		risk_type.put("enum",risk_list);
+		need_type = Map();
+		need_type.put("type","string");
+		need_list = {"clear","possible","none","unknown"};
+		need_type.put("enum",need_list);
+		fact_type = Map();
+		fact_type.put("type","string");
+		fact_list = {"employees","industry","country","growth","funding","risk","service_need"};
+		fact_type.put("enum",fact_list);
+		source_fields = Map();
+		source_fields.put("fact",fact_type);
+		source_fields.put("url",text_type);
+		source_type = Map();
+		source_type.put("type","object");
+		source_type.put("properties",source_fields);
+		source_required_list = {"fact","url"};
+		source_type.put("required",source_required_list);
+		source_type.put("additionalProperties",false);
+		source_list_type = Map();
+		source_list_type.put("type","array");
+		source_list_type.put("items",source_type);
+		research_fields = Map();
+		research_fields.put("match",match_type);
+		research_fields.put("employees_min",number_type);
+		research_fields.put("employees_max",number_type);
+		research_fields.put("industry_group",industry_type);
+		research_fields.put("country_code",country_type);
+		research_fields.put("growth",growth_type);
+		research_fields.put("growth_detail",text_type);
+		research_fields.put("funding",text_type);
+		research_fields.put("risk",risk_type);
+		research_fields.put("risk_detail",text_type);
+		research_fields.put("service_need",need_type);
+		research_fields.put("service_detail",text_type);
+		research_fields.put("sources",source_list_type);
+		research_type = Map();
+		research_type.put("type","object");
+		research_type.put("properties",research_fields);
+		research_required_list = {"match","employees_min","employees_max","industry_group","country_code","growth","growth_detail","funding","risk","risk_detail","service_need","service_detail","sources"};
+		research_type.put("required",research_required_list);
+		research_type.put("additionalProperties",false);
 		answer_fields = Map();
 		answer_fields.put("verdict",verdict_type);
 		answer_fields.put("evidence",evidence_type);
@@ -226,10 +335,11 @@ string standalone.lead_ai_summary(String lead_id)
 		answer_fields.put("concerns",list_type);
 		answer_fields.put("next_step",text_type);
 		answer_fields.put("company",company_type);
+		answer_fields.put("research",research_type);
 		schema = Map();
 		schema.put("type","object");
 		schema.put("properties",answer_fields);
-		answer_required_list = {"verdict","evidence","summary","for_deal","concerns","next_step","company"};
+		answer_required_list = {"verdict","evidence","summary","for_deal","concerns","next_step","company","research"};
 		schema.put("required",answer_required_list);
 		schema.put("additionalProperties",false);
 		answer_format = Map();
@@ -267,177 +377,641 @@ string standalone.lead_ai_summary(String lead_id)
 		seen_urls = List();
 		problem = "";
 		finished = false;
-		for each  attempt in attempts
+		status_text = ifnull(lead.get("Lead_Status"),"").toString().toLowerCase();
+		opted_out = ifnull(lead.get("Email_Opt_Out"),false).toString() == "true";
+		written = notes.size() > 0 || ifnull(lead.get("Description"),"").toString() != "";
+		accepted = false;
+		rejected = false;
+		for each  meeting in meetings
 		{
-			if(finished == false)
+			if(meeting.get("outcome") == "Accepted")
 			{
-				try
-				{
-					body = Map();
-					body.put("model",model);
-					body.put("store",false);
-					body.put("max_output_tokens",4000);
-					body.put("reasoning",reasoning);
-					body.put("text",text_settings);
-					body.put("input",crm_text);
-					if(attempt == "web")
-					{
-						body.put("instructions",guide + web_guide);
-						body.put("tools",tool_list);
-						body.put("tool_choice","auto");
-						body.put("max_tool_calls",3);
-						body.put("include",include_list);
-					}
-					else
-					{
-						body.put("instructions",guide + "company: leave every company fact empty, use 0 for the year and an empty sources list.");
-					}
-					ai_request = body.toString();
-					ai_response = invokeurl
-					[
-						url :api_url
-						type :POST
-						parameters:ai_request
-						headers:ai_headers
-						detailed:true
-					];
-					http_code = ifnull(ai_response.get("responseCode"),"").toString();
-					if(http_code == "200")
-					{
-						answer = ai_response.get("responseText").toString().toMap();
-						found_text = "";
-						found_urls = List();
-						for each  item in answer.get("output")
-						{
-							item_type = ifnull(item.get("type"),"").toString();
-							if(item_type == "web_search_call" && item.get("action") != null)
-							{
-								search_action = item.get("action");
-								if(ifnull(search_action.get("url"),"").toString() != "")
-								{
-									found_urls.add(search_action.get("url").toString());
-								}
-								if(search_action.get("sources") != null)
-								{
-									for each  page in search_action.get("sources")
-									{
-										found_urls.add(ifnull(page.get("url"),"").toString());
-									}
-								}
-							}
-							if(item_type == "message")
-							{
-								for each  part in item.get("content")
-								{
-									if(found_text == "" && ifnull(part.get("type"),"").toString() == "output_text")
-									{
-										found_text = ifnull(part.get("text"),"").toString();
-									}
-								}
-							}
-						}
-						if(ifnull(answer.get("status"),"").toString() == "completed" && found_text != "")
-						{
-							// Fails here, and tries again, if the answer is not complete JSON
-							test_map = found_text.toMap();
-							if(test_map.get("verdict") != null)
-							{
-								answer_text = found_text;
-								finished = true;
-								for each  raw_url in found_urls
-								{
-									clean_url = raw_url.replaceAll("[?&]utm_source=openai","").trim();
-									if(clean_url.endsWith("/"))
-									{
-										clean_url = clean_url.subString(0,clean_url.length() - 1);
-									}
-									if(clean_url != "" && !seen_urls.contains(clean_url))
-									{
-										seen_urls.add(clean_url);
-									}
-								}
-							}
-						}
-						if(finished == false)
-						{
-							problem = "OpenAI did not return a full summary. Please try again.";
-						}
-					}
-					else
-					{
-						problem = "OpenAI returned an error (" + http_code + "). Open the function log in CRM for details.";
-						if(http_code == "401")
-						{
-							problem = "OpenAI rejected the API key. Check the CRM variable " + key_variable + ".";
-							finished = true;
-						}
-						else if(http_code == "403" || http_code == "404")
-						{
-							problem = "This OpenAI key cannot use the model " + model + ". Change the model name in the function.";
-							finished = true;
-						}
-						else if(http_code == "429")
-						{
-							problem = "The OpenAI limit or credit has run out. Check billing, or try again in a minute.";
-							finished = true;
-						}
-						if(http_code == "400")
-						{
-							info "Request sent: " + ai_request;
-						}
-						info "OpenAI error " + http_code + " (" + attempt + "): " + ai_response.get("responseText");
-					}
-				}
-				catch (e5)
-				{
-					problem = "OpenAI did not answer in time, or its answer could not be read. Please try again.";
-					info "Attempt " + attempt + " failed: " + e5;
-				}
+				accepted = true;
+			}
+			if(meeting.get("outcome") == "Rejected")
+			{
+				rejected = true;
 			}
 		}
-		if(answer_text == "")
+		lost = status_text.contains("lost") || status_text.contains("junk") || status_text.contains("not qualified");
+		now_ms = zoho.currenttime.toString("yyyy-MM-dd HH:mm:ss").toTime("yyyy-MM-dd HH:mm:ss").toLong();
+		// First pass: from CRM only. Second pass: with the OpenAI answer.
+		data = Map();
+		verdict = "";
+		next_step = "";
+		passes = {"first","final"};
+		for each  pass_name in passes
 		{
-			result.put("error",problem);
-			return result.toString();
+			if(pass_name == "final")
+			{
+				for each  attempt in attempts
+				{
+					if(finished == false)
+					{
+						try
+						{
+							body = Map();
+							body.put("model",model);
+							body.put("store",false);
+							body.put("max_output_tokens",4000);
+							body.put("reasoning",reasoning);
+							body.put("text",text_settings);
+							body.put("input",crm_text);
+							if(attempt == "web")
+							{
+								body.put("instructions",guide + web_guide);
+								body.put("tools",tool_list);
+								body.put("tool_choice","auto");
+								body.put("max_tool_calls",1);
+								body.put("include",include_list);
+							}
+							else
+							{
+								body.put("instructions",guide + "company: leave every company fact empty, use 0 for the year and an empty sources list. " + need_guide + "match: unsure. Leave every research fact except service_need unknown, empty or 0.");
+							}
+							ai_request = body.toString();
+							ai_response = invokeurl
+							[
+								url :api_url
+								type :POST
+								parameters:ai_request
+								headers:ai_headers
+								detailed:true
+							];
+							http_code = ifnull(ai_response.get("responseCode"),"").toString();
+							if(http_code == "200")
+							{
+								answer = ai_response.get("responseText").toString().toMap();
+								found_text = "";
+								found_urls = List();
+								for each  item in answer.get("output")
+								{
+									item_type = ifnull(item.get("type"),"").toString();
+									if(item_type == "web_search_call" && item.get("action") != null)
+									{
+										search_action = item.get("action");
+										if(ifnull(search_action.get("url"),"").toString() != "")
+										{
+											found_urls.add(search_action.get("url").toString());
+										}
+										if(search_action.get("sources") != null)
+										{
+											for each  page in search_action.get("sources")
+											{
+												found_urls.add(ifnull(page.get("url"),"").toString());
+											}
+										}
+									}
+									if(item_type == "message")
+									{
+										for each  part in item.get("content")
+										{
+											if(found_text == "" && ifnull(part.get("type"),"").toString() == "output_text")
+											{
+												found_text = ifnull(part.get("text"),"").toString();
+											}
+										}
+									}
+								}
+								if(ifnull(answer.get("status"),"").toString() == "completed" && found_text != "")
+								{
+									// Fails here, and tries again, if the answer is not complete JSON
+									test_map = found_text.toMap();
+									if(test_map.get("verdict") != null)
+									{
+										answer_text = found_text;
+										finished = true;
+										for each  raw_url in found_urls
+										{
+											clean_url = raw_url.replaceAll("[?&]utm_source=openai","").trim();
+											if(clean_url.endsWith("/"))
+											{
+												clean_url = clean_url.subString(0,clean_url.length() - 1);
+											}
+											if(clean_url != "" && !seen_urls.contains(clean_url))
+											{
+												seen_urls.add(clean_url);
+											}
+										}
+									}
+								}
+								if(finished == false)
+								{
+									problem = "OpenAI did not return a full summary. Please try again.";
+								}
+							}
+							else
+							{
+								problem = "OpenAI returned an error (" + http_code + "). Open the function log in CRM for details.";
+								if(http_code == "401")
+								{
+									problem = "OpenAI rejected the API key. Check the CRM variable " + key_variable + ".";
+									finished = true;
+								}
+								else if(http_code == "403" || http_code == "404")
+								{
+									problem = "This OpenAI key cannot use the model " + model + ". Change the model name in the function.";
+									finished = true;
+								}
+								else if(http_code == "429")
+								{
+									problem = "The OpenAI limit or credit has run out. Check billing, or try again in a minute.";
+									finished = true;
+								}
+								if(http_code == "400")
+								{
+									info "Request sent: " + ai_request;
+								}
+								info "OpenAI error " + http_code + " (" + attempt + "): " + ai_response.get("responseText");
+							}
+						}
+						catch (e5)
+						{
+							problem = "OpenAI did not answer in time, or its answer could not be read. Please try again.";
+							info "Attempt " + attempt + " failed: " + e5;
+						}
+					}
+				}
+				if(answer_text == "")
+				{
+					result.put("error",problem);
+					return result.toString();
+				}
+				data = answer_text.toMap();
+				verdict = ifnull(data.get("verdict"),"too_early").toString();
+				// Same checks as the widget, so the field and the screen agree
+				next_step = ifnull(data.get("next_step"),"").toString();
+				if(opted_out)
+				{
+					verdict = "not_interested";
+					next_step = "Do not contact this lead. They have opted out.";
+				}
+				else if(verdict == "not_interested" && !written && !lost && !rejected)
+				{
+					verdict = "too_early";
+				}
+				else if(verdict == "interested" && !written && !accepted)
+				{
+					verdict = "possible";
+				}
+			}
+			// =====================  TEMPERATURE: fixed rules only  =====================
+			// A problem here never hides the summary.
+			try
+			{
+				research = data.get("research");
+				if(research == null)
+				{
+					research = Map();
+				}
+				sure = ifnull(research.get("match"),"").toString() == "sure";
+				sourced = List();
+				hosts = List();
+				agreed = false;
+				fact_hosts = Map();
+				kept = List();
+				if(research.get("sources") != null)
+				{
+					for each  row in research.get("sources")
+					{
+						fact_name = ifnull(row.get("fact"),"").toString();
+						fact_url = ifnull(row.get("url"),"").toString().replaceAll("[?&]utm_source=openai","").trim();
+						if(fact_url.endsWith("/"))
+						{
+							fact_url = fact_url.subString(0,fact_url.length() - 1);
+						}
+						// The need for our services may also be written in CRM
+						if(fact_name == "service_need" && fact_url == "CRM" && written)
+						{
+							if(!sourced.contains(fact_name))
+							{
+								sourced.add(fact_name);
+							}
+						}
+						else if(sure && fact_url.startsWith("http") && seen_urls.contains(fact_url))
+						{
+							host = fact_url.replaceAll("^https?://","").replaceAll("^www\\.","").replaceAll("/.*$","");
+							if(!sourced.contains(fact_name))
+							{
+								sourced.add(fact_name);
+							}
+							known_host = ifnull(fact_hosts.get(fact_name),"");
+							if(known_host != "" && known_host != host)
+							{
+								agreed = true;
+							}
+							fact_hosts.put(fact_name,host);
+							kept_row = Map();
+							kept_row.put("fact",fact_name);
+							kept_row.put("url",fact_url);
+							kept.add(kept_row);
+						}
+					}
+				}
+				earned = 0;
+				judged = 0;
+				good = List();
+				bad = List();
+				// Meetings. CRM knows when there is none, so this is always judged.
+				reset_day = ifnull(lead.get(back_to_cold_field),"").toString();
+				if(reset_day.length() >= 10)
+				{
+					reset_day = reset_day.subString(0,10).replaceAll("-","");
+				}
+				else
+				{
+					reset_day = "";
+				}
+				high_signal = "";
+				meeting_points = 0;
+				meeting_note = "";
+				for each  one_meeting in meetings
+				{
+					outcome = one_meeting.get("outcome").toString();
+					if(outcome == "Rejected" || outcome == "No-show")
+					{
+						meeting_note = "A meeting ended as " + outcome;
+					}
+					else if(outcome == "Accepted")
+					{
+						meeting_points = s.get("meeting_max");
+					}
+					else if(meeting_points < s.get("meeting_booked"))
+					{
+						meeting_points = s.get("meeting_booked");
+					}
+					booked_text = one_meeting.get("booked").toString();
+					if(one_meeting.get("self_booked").toString() == "true" && booked_text.length() >= 19)
+					{
+						booked_ms = booked_text.subString(0,19).replaceAll("T"," ").toTime("yyyy-MM-dd HH:mm:ss").toLong();
+						after_reset = true;
+						if(reset_day != "")
+						{
+							after_reset = booked_text.subString(0,10).replaceAll("-","").toLong() > reset_day.toLong();
+						}
+						if(now_ms - booked_ms < s.get("high_intent_days") * 86400000 && after_reset)
+						{
+							high_signal = "Self-booked meeting";
+						}
+					}
+				}
+				if(!unread.contains("meetings"))
+				{
+					judged = judged + s.get("meeting_max");
+					earned = earned + meeting_points;
+					if(meeting_points == s.get("meeting_max"))
+					{
+						good.add("A meeting was accepted");
+					}
+					else if(meeting_points > 0)
+					{
+						good.add("A meeting is on record");
+					}
+					else if(meeting_note != "")
+					{
+						bad.add(meeting_note);
+					}
+					else
+					{
+						bad.add("No meeting yet");
+					}
+				}
+				// Interest, as judged by the AI from CRM and corrected by the checks above
+				if(verdict == "interested")
+				{
+					judged = judged + s.get("interest_max");
+					earned = earned + s.get("interest_max");
+					good.add("Shows clear interest");
+				}
+				else if(verdict == "possible")
+				{
+					judged = judged + s.get("interest_max");
+					earned = earned + s.get("interest_possible");
+					good.add("Shows possible interest");
+				}
+				else if(verdict == "not_interested")
+				{
+					judged = judged + s.get("interest_max");
+				}
+				// Need for our services
+				need = ifnull(research.get("service_need"),"unknown").toString();
+				need_detail = ifnull(research.get("service_detail"),"").toString().trim();
+				if(sourced.contains("service_need") && need != "unknown")
+				{
+					judged = judged + s.get("need_max");
+					if(need == "clear")
+					{
+						earned = earned + s.get("need_max");
+						good.add("Clear need: " + need_detail);
+					}
+					else if(need == "possible")
+					{
+						earned = earned + s.get("need_possible");
+						good.add("Possible need: " + need_detail);
+					}
+					else
+					{
+						bad.add("No need found for our services");
+					}
+				}
+				// Service chosen on the lead
+				services_text = ifnull(lead.get("Services_List"),"").toString();
+				judged = judged + s.get("service_max");
+				if(services_text != "" && services_text != "[]" && services_text != "-None-")
+				{
+					earned = earned + s.get("service_max");
+					good.add("Chose a service");
+				}
+				else
+				{
+					bad.add("No service chosen");
+				}
+				// Size. A number typed in CRM comes before the research.
+				staff = 0;
+				wide_range = false;
+				staff_text = ifnull(lead.get("No_of_Employees"),"").toString().replaceAll("[^0-9]","");
+				if(staff_text != "")
+				{
+					staff = staff_text.toLong();
+				}
+				if(staff == 0 && sourced.contains("employees"))
+				{
+					low = ifnull(research.get("employees_min"),0).toLong();
+					high = ifnull(research.get("employees_max"),0).toLong();
+					if(high == 0)
+					{
+						high = low;
+					}
+					if(low == 0)
+					{
+						low = high;
+					}
+					staff = ((low + high) / 2).round(0).toLong();
+					wide_range = low > 0 && high > low * 3;
+				}
+				if(staff > 0)
+				{
+					judged = judged + s.get("size_max");
+					if(staff >= 1000)
+					{
+						earned = earned + s.get("size_1000");
+						good.add("Large company, about " + staff + " staff");
+					}
+					else if(staff >= 50)
+					{
+						earned = earned + s.get("size_50");
+						good.add("Good size, about " + staff + " staff");
+					}
+					else if(staff >= 10)
+					{
+						earned = earned + s.get("size_10");
+						good.add("Medium size, about " + staff + " staff");
+					}
+					else
+					{
+						earned = earned + s.get("size_1");
+						bad.add("Very small, about " + staff + " staff");
+					}
+				}
+				// Industry. A value typed in CRM comes before the research.
+				industry_state = "";
+				crm_industry = ifnull(lead.get("Industry"),"").toString().toLowerCase();
+				if(crm_industry != "" && crm_industry != "-none-")
+				{
+					industry_state = "other";
+					for each  word in target_industries
+					{
+						if(crm_industry.contains(word))
+						{
+							industry_state = "target";
+						}
+					}
+				}
+				else if(sourced.contains("industry"))
+				{
+					group_name = ifnull(research.get("industry_group"),"unknown").toString();
+					if(group_name == "other_business")
+					{
+						industry_state = "other";
+					}
+					else if(group_name == "not_a_business")
+					{
+						industry_state = "none";
+					}
+					else if(group_name != "unknown")
+					{
+						industry_state = "target";
+					}
+				}
+				if(industry_state != "")
+				{
+					judged = judged + s.get("industry_max");
+					if(industry_state == "target")
+					{
+						earned = earned + s.get("industry_max");
+						good.add("Works in a target industry");
+					}
+					else if(industry_state == "other")
+					{
+						earned = earned + s.get("industry_other");
+						bad.add("Not one of our main industries");
+					}
+					else
+					{
+						bad.add("Does not look like a business");
+					}
+				}
+				// Growth, funding and risk
+				growth = ifnull(research.get("growth"),"unknown").toString();
+				if(sourced.contains("growth") && growth != "unknown")
+				{
+					judged = judged + s.get("growth_max");
+					if(growth == "strong")
+					{
+						earned = earned + s.get("growth_max");
+					}
+					else
+					{
+						earned = earned + s.get("growth_some");
+					}
+					good.add("Growth: " + ifnull(research.get("growth_detail"),"").toString());
+				}
+				funding = ifnull(research.get("funding"),"").toString().trim();
+				if(sourced.contains("funding") && funding != "")
+				{
+					judged = judged + s.get("funding_max");
+					earned = earned + s.get("funding_max");
+					good.add("Funding or revenue: " + funding);
+				}
+				risk = ifnull(research.get("risk"),"unknown").toString();
+				if(sourced.contains("risk") && risk != "unknown")
+				{
+					if(risk == "serious")
+					{
+						earned = earned - s.get("risk_serious");
+					}
+					else
+					{
+						earned = earned - s.get("risk_some");
+					}
+					risk_first = List();
+					risk_first.add("Risk: " + ifnull(research.get("risk_detail"),"").toString());
+					for each  bad_item in bad
+					{
+						risk_first.add(bad_item);
+					}
+					bad = risk_first;
+				}
+				// Country. A value typed in CRM comes before the research.
+				country_state = "";
+				country_text = ifnull(lead.get("Country"),"").toString().toUpperCase().replaceAll("[^A-Z]","");
+				if(our_countries.contains(country_text))
+				{
+					country_state = "in";
+				}
+				else if(country_text != "" && country_text != "NONE")
+				{
+					country_state = "out";
+				}
+				else if(sourced.contains("country"))
+				{
+					found_country = ifnull(research.get("country_code"),"unknown").toString();
+					if(found_country == "other")
+					{
+						country_state = "out";
+					}
+					else if(found_country != "unknown")
+					{
+						country_state = "in";
+					}
+				}
+				if(country_state != "")
+				{
+					judged = judged + s.get("country_max");
+					if(country_state == "in")
+					{
+						earned = earned + s.get("country_max");
+						good.add("In a country we serve");
+					}
+					else
+					{
+						earned = earned + s.get("country_other");
+						bad.add("Outside AU, UK and US");
+					}
+				}
+				if(earned < 0)
+				{
+					earned = 0;
+				}
+				score = (earned * 100.0 / judged).round(0).toLong();
+				// Blocked leads first, then the engagement rules, then the score
+				headline = "";
+				temperature = "Cold";
+				if(opted_out)
+				{
+					headline = "Opted out";
+				}
+				else if(lost)
+				{
+					headline = "Lead status is " + ifnull(lead.get("Lead_Status"),"").toString();
+				}
+				else if(high_signal != "")
+				{
+					temperature = "Hot";
+					headline = high_signal;
+				}
+				else if(reset_day != "")
+				{
+					headline = "Returned to Cold after reschedules";
+				}
+				else if(verdict == "not_interested")
+				{
+					headline = "Not interested, from the CRM record";
+				}
+				else if(judged < s.get("min_judged"))
+				{
+					temperature = "Not enough data";
+				}
+				else if(score >= s.get("hot"))
+				{
+					temperature = "Hot";
+				}
+				else if(score >= s.get("warm"))
+				{
+					temperature = "Warm";
+				}
+				// High only if two sites support the same fact
+				sureness = "Low";
+				if(agreed && sourced.size() >= 3 && !wide_range)
+				{
+					sureness = "High";
+				}
+				else if(sourced.size() >= 3 || judged >= s.get("medium_judged"))
+				{
+					sureness = "Medium";
+				}
+				// The three main reasons for and against
+				top_good = List();
+				top_bad = List();
+				if(headline != "" && temperature == "Hot")
+				{
+					top_good.add(headline);
+				}
+				else if(headline != "")
+				{
+					top_bad.add(headline);
+				}
+				for each  good_item in good
+				{
+					if(top_good.size() < 3)
+					{
+						top_good.add(good_item);
+					}
+				}
+				for each  one_bad in bad
+				{
+					if(top_bad.size() < 3)
+					{
+						top_bad.add(one_bad);
+					}
+				}
+				heat = Map();
+				heat.put("value",temperature);
+				heat.put("score",score);
+				heat.put("judged",judged);
+				heat.put("confidence",sureness);
+				heat.put("good",top_good);
+				heat.put("bad",top_bad);
+				heat.put("sources",kept);
+				heat.put("saved",false);
+				// Before OpenAI answers, an earlier temperature is replaced only if a rule decides it
+				current = ifnull(lead.get(temperature_field),"").toString();
+				if(pass_name == "final" || headline != "" || current == "" || current == "-None-")
+				{
+					result.put("temperature",heat);
+					heat_map = Map();
+					heat_map.put(temperature_field,temperature);
+					heat_saved = zoho.crm.updateRecord(module_name,lead_number,heat_map);
+					if(heat_saved == null || heat_saved.get("id") == null)
+					{
+						info "The temperature was not saved: " + heat_saved;
+					}
+					else
+					{
+						heat.put("saved",true);
+						result.put("temperature",heat);
+					}
+				}
+			}
+			catch (e7)
+			{
+				info "The temperature could not be worked out: " + e7;
+			}
 		}
 		// ---------- 5. FILL THE AI FIELDS ----------
 		// A problem here never hides the summary.
 		try
 		{
-			data = answer_text.toMap();
-			verdict = ifnull(data.get("verdict"),"too_early").toString();
-			status_text = ifnull(lead.get("Lead_Status"),"").toString().toLowerCase();
-			opted_out = ifnull(lead.get("Email_Opt_Out"),false).toString() == "true";
-			written = notes.size() > 0 || ifnull(lead.get("Description"),"").toString() != "";
-			accepted = false;
-			rejected = false;
-			for each  meeting in meetings
-			{
-				if(meeting.get("outcome") == "Accepted")
-				{
-					accepted = true;
-				}
-				if(meeting.get("outcome") == "Rejected")
-				{
-					rejected = true;
-				}
-			}
-			// Same checks as the widget, so the field and the screen agree
-			next_step = ifnull(data.get("next_step"),"").toString();
-			lost = status_text.contains("lost") || status_text.contains("junk") || status_text.contains("not qualified");
-			if(opted_out)
-			{
-				verdict = "not_interested";
-				next_step = "Do not contact this lead. They have opted out.";
-			}
-			else if(verdict == "not_interested" && !written && !lost && !rejected)
-			{
-				verdict = "too_early";
-			}
-			else if(verdict == "interested" && !written && !accepted)
-			{
-				verdict = "possible";
-			}
 			labels = Map();
 			labels.put("interested","Interested");
 			labels.put("possible","Possibly interested");
