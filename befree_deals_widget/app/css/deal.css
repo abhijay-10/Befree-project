@@ -139,7 +139,7 @@ section form { margin: 8px 0; }
 .panel select { display: block; margin-top: 3px; min-width: min(100%, 260px); }
 
 /* ---------- KPI band ---------- */
-.stats { display: grid; grid-template-columns: 1.25fr 1fr 1.1fr; margin-top: 16px; background: var(--card); border: 1px solid var(--rule-dark); border-radius: var(--r); box-shadow: var(--lift); overflow: hidden; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; background: var(--card); border: 1px solid var(--rule-dark); border-radius: var(--r); box-shadow: var(--lift); overflow: hidden; }
 .stats section { min-width: 0; border: 0; border-radius: 0; background: none; box-shadow: none; padding: 16px 22px 18px; }
 .stats section + section { border-left: 1px solid var(--rule); }
 .stats .is-hot { box-shadow: inset 0 3px 0 #d07a6f; }
@@ -383,7 +383,7 @@ button.primary:hover:not(:disabled) { background: var(--dgrad); filter: brightne
 .stats section { --c: #0d9488; position: relative; overflow: hidden; border: 1px solid var(--rule-dark); border-radius: var(--r); background: #fff; box-shadow: var(--lift); padding: 20px 22px 20px; animation: rise .4s cubic-bezier(.2, .7, .3, 1) backwards; transition: transform .2s; }
 .stats section + section { border-left: 1px solid var(--rule-dark); }
 .stats section::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--c), color-mix(in srgb, var(--c) 45%, #4f46e5)); }
-.stats section:hover { transform: translateY(-3px); }
+.stats section:hover { transform: none; }
 .stats section:nth-child(1) { background: linear-gradient(165deg, #e8f8f5, #fff 60%); }
 .stats section:nth-child(2) { --c: #6366f1; animation-delay: .08s; }
 .stats section:nth-child(3) { --c: #f59e0b; animation-delay: .16s; }
@@ -563,3 +563,11 @@ h1 { font-size: 40px; line-height: 1.12; }
 .strip { grid-template-columns: minmax(0, 1fr) minmax(130px, auto); }
 .strip > div:nth-child(2) { grid-column: auto; grid-row: auto; border-left: 1px solid var(--rule); border-top: 0; }
 @media (max-width: 720px) { h1 { font-size: 30px; } }
+
+/* ---------- One left edge in the header ----------
+   The strip runs edge to edge (.ticket dl has no margin), so its text gets the page padding itself:
+   "Service" starts on the same line as the deal name, the stage pipeline and the action bar. */
+.ticket .strip > div:first-child { padding-left: calc(var(--pad) - 1px); }
+.ticket .strip > div:last-child { padding-right: calc(var(--pad) - 1px); }
+/* The three number cards share one size and stay level */
+.stats { align-items: stretch; }

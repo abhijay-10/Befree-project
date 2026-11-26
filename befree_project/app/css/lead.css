@@ -581,20 +581,39 @@ h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
 
-/* ---------- Action row: every button on one line ----------
-   Slightly tighter buttons so the whole row (including Mark as junk and Opt out) fits on one line.
-   When the card is too narrow for that, Mark as junk and Opt out move to their own line, starting
-   at the same left edge as Book meeting, instead of hanging at the right under the other buttons. */
-.hero { container: lead-hero / inline-size; }
-.actions { flex-wrap: nowrap; gap: 6px; }
-.actions > button, .end-group > * { flex: none; padding: 0 11px; gap: 7px; white-space: nowrap; }
+/* ---------- Action buttons: two lines ----------
+   Line 1: Book meeting, AI summary, Send email, Convert to Deal, Open in CRM and Mark as junk.
+   Line 2: Email opt out on its own, starting at the same left edge (the row-break forces the new line).
+   Nothing is pushed to the far right. */
+.actions { flex-wrap: wrap; gap: 8px; row-gap: 12px; }
+.actions > button, .end-group > * { flex: none; padding: 0 12px; gap: 7px; white-space: nowrap; }
 .actions > button.icon-only { padding: 0; }
-.end-group { flex: none; gap: 6px; }
-@container lead-hero (max-width: 1130px) {
-  .actions { flex-wrap: wrap; row-gap: 10px; }
-  .end-group { flex-basis: 100%; margin-left: 0; }
-}
+.actions > .junk, .actions > button.quiet { margin-left: 0; }
+.actions > .pill.junk { display: inline-flex; align-items: center; height: 40px; }
+.actions > .row-break { flex-basis: 100%; height: 0; }
+/* The break is an empty line of its own, which adds one extra row gap; take that back so the two lines are 12px apart */
+.actions > .row-break + * { margin-top: -12px; }
 
 /* ---------- Bigger company name ---------- */
 h1 { font-size: 40px; line-height: 1.12; }
 @media (max-width: 720px) { h1 { font-size: 30px; } }
+
+/* ---------- Leads list: same shape as the Deals widget ----------
+   A 280px column fixed to the left edge, full height, divided by a line (no floating card),
+   with the lead page beside it. */
+.shell { gap: 0; padding: 0; }
+#rail { flex: 0 0 280px; position: sticky; top: 0; height: 100vh; max-height: none; border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.main { padding: 28px; }
+.rail-top { padding: 20px 18px 16px; }
+#leads { padding: 10px; }
+#leads button + button { margin-top: 3px; }
+/* Status and Lead source get the full width, so no filter text is cut off in the narrower list */
+.filters select:first-child, .filters select:last-child { grid-column: 1 / -1; }
+/* Status tag: small and readable ("font: ... inherit" was invalid, so it fell back to a large font) */
+.st { max-width: 96px; font-size: 11px; font-weight: 600; line-height: 1.5; }
+@media (max-width: 1000px) {
+  .shell { flex-direction: column; align-items: stretch; }
+  #rail { position: static; flex: none; height: auto; max-height: 290px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .main { flex: none; }
+}
+@media (max-width: 720px) { .main { padding: 14px; } }

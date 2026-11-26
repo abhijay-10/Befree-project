@@ -22,6 +22,7 @@
     phone: '<path d="M6 3h3l1.8 4.6-2.3 1.7a12 12 0 0 0 6.2 6.2l1.7-2.3L21 15v3a3 3 0 0 1-3.2 3A16 16 0 0 1 3 6.2 3 3 0 0 1 6 3z"/>',
     deal: '<rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M8.5 7.5V5a1.5 1.5 0 0 1 1.5-1.5h4A1.5 1.5 0 0 1 15.5 5v2.5M3 13h18"/>',
     stop: '<circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/>',
+    mailOff: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6M2.5 2.5l19 19"/>',
     heat: '<path d="M10 13.6V5a2 2 0 1 1 4 0v8.6a4.5 4.5 0 1 1-4 0z"/>',
     people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
     check: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="m8 12.2 2.8 2.8L16.2 9"/>',
@@ -137,7 +138,7 @@
   }
   function tasksBlock() {
     if (V.problems.tasks) return block('Tasks', problem('tasks'));
-    const add = R.isOptedOut(V.contact) ? '<p class="mute">Opted out. New tasks are blocked.</p>'
+    const add = R.isOptedOut(V.contact) ? '<p class="mute">Email opted out. New tasks are blocked.</p>'
       : '<form class="add task" data-form="task"><input name="subject" placeholder="Task" aria-label="Task" maxlength="200" required><input type="date" name="due" aria-label="Due date" required><button class="primary">Add task</button></form>';
     const list = V.tasks.slice().sort((a, b) => b.open - a.open || R.toDate(a.due || '9999-01-01') - R.toDate(b.due || '9999-01-01'));
     return block('Tasks', add + (list.length ? '<ul class="tasks">' + list.map(t => `<li class="${t.open ? '' : 'closed'}"><span><b>${esc(t.type)}</b><small>${esc(t.owner)}${t.due ? (t.owner ? ', ' : '') + 'due ' + date(t.due) : ''} ${t.open && t.due && R.daysBetween(t.due, V.now) > 0 ? pill('Overdue', 'bad') : ''}</small></span>${t.open ? `<button data-close="${esc(t.id)}">Complete</button>` : pill('Completed', 'good')}</li>`).join('') + '</ul>' : '<p class="mute">No tasks.</p>'));
@@ -160,7 +161,7 @@
       .concat(V.service && V.service.field ? [['Service', (c.services || []).join(', ') || 'Not chosen']] : [])
       .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
     const company = a.name && a.name !== 'No company' ? (!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)) : '';
-    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(company ? a.name : c.name))}</div><div class="who"><h1>${company || esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
+    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(company ? a.name : c.name))}</div><div class="who"><h1>${company || esc(c.name)} ${R.isOptedOut(c) ? pill('Email opted out', 'bad') : ''}</h1>
       <p class="person">${company ? `<b>${esc(c.name)}</b>` : ''}${c.title ? (company ? '<span class="sep"></span>' : '') + esc(c.title) : ''}</p></div></header>
       <dl class="facts">${facts.map(([k, v]) => `<div${k === 'Service' ? ' class="wide"' : ''}><dt>${k}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join('')}</dl>`;
   }
@@ -224,7 +225,7 @@
     const open = V.tasks.filter(k => k.open).sort((x, y) => R.toDate(x.due || '9999-01-01') - R.toDate(y.due || '9999-01-01'))[0];
     const due = d => d ? `Due ${date(d)} ${R.daysBetween(d, V.now) > 0 ? pill('Overdue', 'bad') : ''}` : 'No due date';
     if (V.problems.tasks) return block('Next task', problem('tasks'));
-    if (R.isOptedOut(V.contact)) return block('Next task', '<p class="mute">No outreach. This contact is opted out.</p>');
+    if (R.isOptedOut(V.contact)) return block('Next task', '<p class="mute">No outreach. This contact opted out of email.</p>');
     if (open) return block('Next task', `<p><b>${esc(open.type)}</b></p><p>${esc(open.owner)}</p><p>${due(open.due)}</p>`);
     if (V.problems.touches) return block('Next task', problem('touches'));
     if (missing('touches')) return block('Next task', '<p class="mute">No open task.</p>');
@@ -285,16 +286,17 @@
     add('email', 'data-do="email"', icon('mail') + 'Send email', out);
     add('raise', 'data-do="raise"', icon('deal') + 'Convert to Deal', !ok, 'primary');
     if (V.live) b.push(`<button class="icon-only" title="Open in CRM" data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}<span class="sr">Open in CRM</span></button>`);
-    const endAt = b.length; // what follows sits together at the right end
-    if (ui.junk) b.push(ui.junk);
-    add('optOut', 'data-show="optout"', icon('stop') + 'Opt out', out, 'quiet');
+    if (ui.junk) b.push(ui.junk); // Mark as junk sits on the same line as the other buttons
+    const endAt = b.length; // Email opt out goes on its own line below
+    add('optOut', 'data-show="optout"', icon('mailOff') + 'Email opt out', out, 'quiet');
     const notes = [];
-    if (out) notes.push('Opted out: email, call tasks and meeting booking are blocked.');
+    if (out) notes.push('Email opted out: no emails or email notifications. Call tasks and meeting booking are also blocked. The phone number and details stay saved in CRM.');
     if (R.can(V.user, 'raise') && !ok) notes.push(V.live && !V.isLead || !C.acceptOnInvite ? 'Convert to Deal unlocks after an Accepted meeting.' : !m || state === 'done' ? 'Convert to Deal unlocks after you book a meeting and send the invitation.' : m.reply === 'declined' ? 'The client declined the invitation. Book a later meeting and send its invitation to unlock Convert to Deal.' : 'Click Send email to send the meeting invitation. Convert to Deal then unlocks.');
     if (V.live && V.user.role === 'View only') notes.push(`The CRM profile "${esc(V.user.profile || 'unknown')}" is not matched to a Befree role in config.js.`);
     if (V.service && V.service.notFound && V.service.notFound.length && V.user.role === 'Admin') notes.push('These API names in config.js are not in your Leads module: ' + esc(V.service.notFound.join(', ')) + '.');
     const end = b.splice(endAt);
-    return `<div class="actions">${b.join('') || (end.length ? '' : '<span class="mute">View only</span>')}${end.length ? `<span class="end-group">${end.join('')}</span>` : ''}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
+    const lineBreak = b.length && end.length ? '<span class="row-break" aria-hidden="true"></span>' : '';
+    return `<div class="actions">${b.join('') || (end.length ? '' : '<span class="mute">View only</span>')}${lineBreak}${end.join('')}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
   }
   // AI summary. Drawn in its own box, so typing elsewhere on the page is not lost.
   function drawAi() {
@@ -477,7 +479,7 @@
       const m = R.latestMeeting(V);
       return `<div class="panel"><p><b>Send the meeting invitation${m.invited ? ' again' : ''}?</b></p><p>To ${esc(V.contact.name)} (${esc(V.contact.email)}), for the meeting on ${time(m.start)}.</p><p class="mute">CRM emails the client an invitation and adds them to the meeting.</p><button class="primary" data-do="invite">Send invitation</button> <button data-do="cancel">Cancel</button></div>`;
     }
-    if (ui.form === 'optout') return `<div class="panel"><p>Opt out ${esc(V.contact.name)}? Emails and call tasks will be blocked.</p><button class="primary" data-do="optout">Yes, opt out</button> <button data-do="cancel">Cancel</button></div>`;
+    if (ui.form === 'optout') return `<div class="panel"><p><b>Email opt out ${esc(V.contact.name)}?</b></p><p>They will get no more emails or email notifications. Call tasks and meeting booking will also be blocked. Their phone number and details stay saved in CRM.</p><button class="primary" data-do="optout">Yes, opt out of email</button> <button data-do="cancel">Cancel</button></div>`;
     if (ui.form === 'book' || ui.form === 'resched') return `<form class="panel" data-form="${ui.form}"><label>${ui.form === 'book' ? 'Meeting' : 'New meeting'} date and time<input type="datetime-local" name="start" required></label><button class="primary">${ui.form === 'book' ? 'Book meeting' : 'Reschedule'}</button> <button type="button" data-do="cancel">Cancel</button></form>`;
     return '';
   }
@@ -620,7 +622,7 @@
         if (!ui.id) return Promise.resolve(db.live && db.leads()).then(list => { if (list) ui.list = list; rail(); }).catch(fail);
         return run(async () => { if (db.live) ui.list = await db.leads(); }, 'Leads refreshed.');
       case 'touches': ui.allTouches = !ui.allTouches; return say(null);
-      case 'optout': return run(() => db.optOut(V), V.contact.name + ' is opted out.');
+      case 'optout': return run(() => db.optOut(V), V.contact.name + ' is opted out of email.');
       case 'call': return run(() => db.addCall(V), 'Call task added.');
       case 'toCold': return run(() => db.toCold(V, m), 'Returned to Cold after ' + C.maxReschedules + ' reschedules.');
       case 'email':
