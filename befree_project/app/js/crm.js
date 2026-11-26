@@ -1,4 +1,4 @@
-// Reads and writes Zoho CRM. Same functions as sample.js.
+// Reads and writes Zoho CRM.
 (function (root) {
   const C = root.BefreeConfig, F = C.fields, M = C.modules;
   const id = v => (v && typeof v === 'object' ? v.id : v) || null;
@@ -206,7 +206,7 @@
         if (!r || !r.info || !r.info.more_records) break;
         if (page === 10) all.partial = true;
       }
-      const list = all.map(x => ({ id: x.id, name: person(x), sub: x[C.lead.company] || '', status: x[C.lead.status] || '', services: service.field ? many(x[service.field]) : [], temperature: x[C.ai.temperatureField] || '', optedOut: !!x[C.lead.optedOut] }));
+      const list = all.map(x => ({ id: x.id, name: person(x), sub: x[C.lead.company] || '', status: x[C.lead.status] || '', services: service.field ? many(x[service.field]) : [], country: country(x[C.lead.country]), source: webSource(x[C.lead.source], x.Description), temperature: x[C.ai.temperatureField] || '', optedOut: !!x[C.lead.optedOut] }));
       list.partial = !!all.partial;
       return list;
     },

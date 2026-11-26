@@ -1,8 +1,8 @@
 // Lead widget screen
 (function () {
   const C = window.BefreeConfig, R = window.BefreeRules;
-  const inCrm = window.self !== window.top && C.mode !== 'demo';
-  const db = inCrm ? window.BefreeCrm : window.BefreeSample;
+  const inCrm = window.self !== window.top;
+  const db = window.BefreeCrm; // live CRM data only
   const ui = { heats: null, id: null, user: C.users[0], form: null, msg: null, bad: false, busy: false, allTouches: false, list: null, rail: false, status: 'all', tab: 'activity', edit: false, draft: null, noteDraft: null, users: null, ai: null, aiClosed: null, dup: null, conv: null, convDraft: null };
   let V = null;
 
@@ -39,7 +39,7 @@
   const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${shapes[n]}</svg>`;
   const icons = { 'Temperature': 'heat', 'Account engagement': 'people', 'Next task': 'check', 'Meeting status': 'calendar', 'Touch timeline': 'clock', 'Activity': 'clock', 'Lead details': 'card', 'Notes': 'note', 'Tasks': 'check', 'Linked deals': 'deal' };
   const initials = n => { const w = String(n).replace(/\(.*?\)/g, '').trim().split(/\s+/); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
-  const block = (title, body, cls) => `<section class="${cls || ''}"><h2>${icon(icons[title])}${title}</h2>${body}</section>`;
+  const block = (title, body, cls) => `<section class="${cls || ''}" data-card="${title.toLowerCase().replace(/\s+/g, '-')}"><h2>${icon(icons[title])}${title}</h2>${body}</section>`;
 
   // Each step is read from the record. Nothing is assumed.
   // The stages are Lead_Status values, matched without spaces, hyphens or capitals. Junk is not a stage.
@@ -59,15 +59,17 @@
       return step(label, done ? 'done' : current ? 'next' : '', done ? icon('tick') : i + 2, current ? 'Current' : done ? 'Done' : 'Not yet', current ? null : crmStatus(name));
     }));
     const junkValue = crmStatus('Junk');
-    const aside = junk ? '<span class="pill bad">Junk lead</span>' : mayMove && junkValue ? `<button class="quiet" data-status="${esc(junkValue)}">${icon('stop')}Mark as junk</button>` : '';
+    const aside = junk ? '<span class="pill bad junk">Junk lead</span>' : mayMove && junkValue ? `<button class="quiet junk" data-status="${esc(junkValue)}">${icon('stop')}Mark as junk</button>` : '';
     const unknown = now && at < 0 && !junk ? `<p class="mute">Lead Status in CRM: ${esc(V.contact.status)}</p>` : '';
-    return `<ol class="journey ${junk ? 'junked' : ''}" aria-label="Lead status">${items.join('')}</ol><div class="junk-row">${unknown}${aside}</div>`;
+    ui.junk = aside;
+    return `<ol class="journey ${junk ? 'junked' : ''}" aria-label="Lead status">${items.join('')}</ol>${unknown ? `<div class="status-note">${unknown}</div>` : ''}`;
   }
   function scale(value) {
     return '<div class="scale" aria-hidden="true">' + ['Cold', 'Warm', 'Hot'].map(x => `<span class="${x.toLowerCase()} ${x === value ? 'on' : ''}"><i></i>${x}</span>`).join('') + '</div>';
   }
   const sourceName = v => /^web\s*-?\s*(site\s*)?forms?$/i.test(String(v).trim()) ? 'Website' : v;
-  const allLeads = () => db.live ? ui.list : db.list(ui.user);
+  const allLeads = () => ui.list;
+  const hue = s => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7); // a steady colour per name
 
   // Only the services of this lead
   function servicesBlock() {
@@ -223,7 +225,7 @@
     if (missing('touches')) return block('Next task', '<p class="mute">No open task.</p>');
     const r = R.routing(V, t);
     if (!r) return block('Next task', `<p class="mute">${t.value === 'Cold' ? 'No task. Cold leads are not routed.' : 'No open task.'}</p>`);
-    return block('Next task', `<p><b>${r.type}</b> ${pill('Expected, not created yet')}</p><p>${r.user ? esc(r.user.name) + ' (' + r.user.role + ')' : 'No owner for this country'}</p><p>${due(r.due)}</p>`);
+    return block('Next task', `<p><b>${r.type}</b> ${pill('Expected, not created yet')}</p><p>${r.user ? esc(r.user.name) + ' (' + r.user.role + ')' : esc(V.account.owner || 'No owner set')}</p><p>${due(r.due)}</p>`);
   }
   function meetingBlock() {
     if (V.problems.meetings) return block('Meeting status', problem('meetings'));
@@ -275,6 +277,7 @@
     add('call', 'data-do="call"', icon('phone') + 'Add call task', out);
     add('raise', 'data-do="raise"', icon('deal') + 'Convert to Deal', !ok, 'primary');
     if (V.live) b.push(`<button data-entity="${V.isLead ? 'Leads' : C.modules.contact}" data-record="${esc(V.contact.id)}">${icon('out')}Open in CRM</button>`);
+    if (ui.junk) b.push(ui.junk);
     add('optOut', 'data-show="optout"', icon('stop') + 'Opt out', out, 'quiet');
     const notes = [];
     if (out) notes.push('Opted out: email, call tasks and meeting booking are blocked.');
@@ -290,7 +293,7 @@
     if ($('#aiButton')) $('#aiButton').disabled = ui.busy || (!!a && a.state === 'loading');
     if (!a || a.id !== ui.id) { box.innerHTML = ''; return; }
     const tools = a.state === 'loading' ? '' : `<div class="ai-tools"><button class="mini" data-do="aiAgain">${icon('sync')}${a.state === 'error' ? 'Try again' : 'Refresh'}</button><button class="mini" data-do="aiClose">Close</button></div>`;
-    const card = body => { box.innerHTML = `<section class="ai-card"><div class="ai-head"><h2>${icon('spark')}AI summary</h2>${a.at ? `<small>Generated ${time(a.at)}</small>` : ''}${V.live ? '' : pill('Sample answer, OpenAI not used')}${tools}</div><div class="ai-body">${body}</div></section>`; };
+    const card = body => { box.innerHTML = `<section class="ai-card"><div class="ai-head"><h2>${icon('spark')}AI summary</h2>${a.at ? `<small>Generated ${time(a.at)}</small>` : ''}${tools}</div><div class="ai-body">${body}</div></section>`; };
     if (a.state === 'loading') return card('<div class="ai-wait"><p class="mute" role="status">Reading this lead and writing the summary</p><i></i><i></i><i></i></div>');
     if (a.state === 'error') return card(`<p class="note bad" role="alert">${esc(a.error)}</p>`);
     const s = a.data, seg = R.segment(V.account.staff);
@@ -329,7 +332,7 @@
     drawDup();
   }
   // Saved summaries: kept in a Leads field if it exists, and in this browser for this user
-  const aiKey = v => 'befree-ai:' + (v.live ? v.user.id : 'sample') + ':' + v.contact.id;
+  const aiKey = v => 'befree-ai:' + v.user.id + ':' + v.contact.id;
   // Changes when something the summary is based on changes
   function aiMark(v) {
     const c = v.contact, text = JSON.stringify([c.name, c.title, v.account.name, c.status, c.lifecycle, !!c.optedOut, c.services, v.described,
@@ -455,7 +458,7 @@
     const result = missed ? `${v.contact.name} is converted, but CRM did not return a deal. Check the account in CRM.`
       : f.createDeal ? `${v.contact.name} is converted. Deal "${f.dealName.trim()}" was created.` : `${v.contact.name} is converted to an account and contact, without a deal.`;
     const role = made.dealId && f.contactRole && !made.roleSet ? '<p class="note warm-note">The contact role could not be confirmed. Check Contact Roles on the deal in CRM.</p>' : '';
-    $('#app').innerHTML = `<div class="hero"><div class="actions">${open(C.modules.deal, made.dealId, 'Open deal')}${open(C.modules.account, made.accountId, 'Open account')}${open(C.modules.contact, made.contactId, 'Open contact') || (v.live ? '' : '<span class="mute">Sample data</span>')}</div></div><p class="note ${missed ? 'bad' : 'good'}" role="status">${esc(result)}</p>${role}`;
+    $('#app').innerHTML = `<div class="hero"><div class="actions">${open(C.modules.deal, made.dealId, 'Open deal')}${open(C.modules.account, made.accountId, 'Open account')}${open(C.modules.contact, made.contactId, 'Open contact')}</div></div><p class="note ${missed ? 'bad' : 'good'}" role="status">${esc(result)}</p>${role}`;
     rail();
   }
   function form() {
@@ -470,10 +473,6 @@
   }
 
   function render() {
-    if (!db.live) {
-      $('#demo').hidden = false;
-      $('#demo').innerHTML = `<span>Sample data</span><label>View as <select id="user">${C.users.map(u => `<option value="${u.id}" ${u === ui.user ? 'selected' : ''}>${u.name} (${u.role}${u.country ? ', ' + u.country : ''})</option>`).join('')}</select></label>`;
-    }
     rail();
     const t = R.temperature(V);
     $('#app').innerHTML = '<div class="hero' + (ui.shown === ui.id ? '' : ' enter') + '">' + header() + journey() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
@@ -484,12 +483,12 @@
     drawAi();
     countHeats();
   }
-  // Lead list: sample data, or the web tab where no record is open
+  // Lead list: the web tab, where no record is open
   function rail() {
     const list = allLeads();
     if (!list || (db.live && !ui.rail)) return;
     $('#rail').hidden = false;
-    if (!$('#find')) $('#rail').innerHTML = '<div class="rail-top"><div class="rail-head"><p>Leads <span id="count"></span></p><button class="mini" data-do="refresh" aria-label="Refresh leads" title="Refresh leads">' + icon('sync') + '</button><button class="mini primary" id="newLead" data-do="newLead">' + icon('plus') + 'New</button></div><input id="find" type="search" placeholder="Search name or company" aria-label="Search name or company"><select id="status" aria-label="Filter by status"></select></div><div id="leads"></div>';
+    if (!$('#find')) $('#rail').innerHTML = '<div class="rail-top"><div class="rail-head"><p>Leads <span id="count"></span></p><button class="mini" data-do="refresh" aria-label="Refresh leads" title="Refresh leads">' + icon('sync') + '</button><button class="mini primary" id="newLead" data-do="newLead">' + icon('plus') + 'New</button></div><input id="find" type="search" placeholder="Search name or company" aria-label="Search name or company"><div class="filters"><select id="status" aria-label="Filter by status"></select><select data-filter="country" aria-label="Filter by country"></select><select data-filter="service" aria-label="Filter by service"></select><select data-filter="source" aria-label="Filter by lead source"></select></div></div><div id="leads"></div>';
     $('#newLead').hidden = !R.can(V.user, 'newLead');
     const states = [...new Set(list.map(c => c.status).filter(Boolean))].sort();
     if (ui.status !== 'all' && !states.includes(ui.status)) ui.status = 'all';
@@ -499,13 +498,22 @@
     }
     $('#status').value = ui.status;
     const q = $('#find').value.trim().toLowerCase();
-    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && (ui.status === 'all' || c.status === ui.status));
+    const pick = ui.filters || (ui.filters = { country: '', service: '', source: '' });
+    const valuesOf = (c, k) => k === 'service' ? c.services || [] : c[k] ? [c[k]] : [];
+    document.querySelectorAll('#rail [data-filter]').forEach(box => {
+      const k = box.dataset.filter, all = { country: 'All countries', service: 'All services', source: 'All lead sources' }[k];
+      const found = [...new Set(list.flatMap(c => valuesOf(c, k)))].sort();
+      if (!found.includes(pick[k])) pick[k] = '';
+      if (box.dataset.key !== found.join()) { box.dataset.key = found.join(); box.innerHTML = `<option value="">${all}</option>` + found.map(x => `<option>${esc(x)}</option>`).join(''); }
+      box.value = pick[k];
+    });
+    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && (ui.status === 'all' || c.status === ui.status) && Object.keys(pick).every(k => !pick[k] || valuesOf(c, k).includes(pick[k])));
     const view = shown.slice(0, 200);
-    const key = view.map(c => c.id + c.name + c.sub).join();
+    const key = view.map(c => c.id + c.name + c.sub + c.status).join();
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
     if ($('#leads').dataset.key !== key) {
       $('#leads').dataset.key = key;
-      $('#leads').innerHTML = view.map(c => `<button data-lead="${esc(c.id)}"><span class="face" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span></button>`).join('') || '<p class="mute">No leads match.</p>';
+      $('#leads').innerHTML = view.map(c => `<button data-lead="${esc(c.id)}"><span class="face" style="--h:${hue(c.name)}" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span>${c.status ? `<em class="st st-${norm(c.status)}">${esc(c.status)}</em>` : ''}</button>`).join('') || '<p class="mute">No leads match.</p>';
       if (shown.length > view.length) $('#leads').insertAdjacentHTML('beforeend', '<p class="mute">Showing 200. Search to find others.</p>');
     }
     $('#leads').querySelectorAll('button').forEach(b => b.setAttribute('aria-current', b.dataset.lead === ui.id ? 'true' : 'false'));
@@ -542,15 +550,9 @@
   function fail(e) { ui.busy = false; $('#app').classList.remove('loading'); $('#app').innerHTML = `<p class="note bad">Could not load the lead. ${esc(e && e.message || 'Unknown error')}</p>`; }
 
   document.addEventListener('change', e => {
-    if (e.target.id === 'user') {
-      ui.user = C.users.find(u => u.id === e.target.value);
-      const list = db.list(ui.user);
-      Object.assign(ui, { status: 'all', edit: false, draft: null, noteDraft: null, ai: null, aiClosed: null });
-      if (!list.some(c => c.id === ui.id)) ui.id = list[0].id;
-      reload();
-    }
     if (e.target.name === 'createDeal') $('#convDeal').hidden = !e.target.checked;
     if (e.target.id === 'status') { ui.status = e.target.value; rail(); }
+    if (e.target.dataset.filter) { ui.filters[e.target.dataset.filter] = e.target.value; rail(); }
     if (e.target.name === 'outcome') $('#reason').hidden = e.target.value !== 'Rejected';
   });
   document.addEventListener('input', e => { if (e.target.id === 'find') rail(); });
@@ -596,7 +598,7 @@
       case 'aiAgain': return summarize();
       case 'aiClose': ui.ai = null; ui.aiClosed = ui.id; drawAi(); return $('#aiButton') && $('#aiButton').focus();
       case 'cancelEdit': ui.edit = false; say(null); ui.draft = null; return;
-      case 'newLead': return V.live ? db.createLead() : say('Sample only: CRM would open its Create Lead page.');
+      case 'newLead': return db.createLead();
       case 'refresh':
         // After a conversion no lead is open, so only the list is read again
         if (!ui.id) return Promise.resolve(db.live && db.leads()).then(list => { if (list) ui.list = list; rail(); }).catch(fail);
@@ -671,7 +673,8 @@
   });
 
   (async () => {
-    ui.id = db.live ? await db.start() : db.list(ui.user)[0].id;
+    if (!inCrm) { $('#app').innerHTML = '<div class="outside"><b>Open this widget inside Zoho CRM</b><p>It shows live CRM data only. There is no sample data.</p></div>'; return; }
+    ui.id = await db.start();
     if (!ui.id) { // web tab: no record is open, so let the user pick
       ui.list = await db.leads();
       ui.rail = true;

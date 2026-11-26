@@ -1,8 +1,8 @@
 // Deal widget screen
 (function () {
   const C = window.BefreeConfig, R = window.BefreeRules;
-  const inCrm = window.self !== window.top && C.mode !== 'demo';
-  const db = inCrm ? window.BefreeCrm : window.BefreeSample;
+  const inCrm = window.self !== window.top;
+  const db = window.BefreeCrm; // live CRM data only
   const ui = { id: null, user: C.users[0], form: null, msg: null, bad: false, busy: false, list: null, rail: false, shown: null };
   let V = null;
 
@@ -75,7 +75,7 @@
   }
   function form() {
     const d = V.deal, cancel = ' <button type="button" data-do="cancel">Cancel</button>';
-    if (ui.form === 'move') { const to = R.nextStage(d.stage, V.stages); return `<form class="panel" data-form="move"><label>Evidence for ${esc(to)}<input name="evidence" required maxlength="1000"></label><p class="mute">Saved as a note on the deal.</p><button class="primary">Move to ${esc(to)}</button>${cancel}</form>`; }
+    if (ui.form === 'move') { const to = R.nextStage(d.stage, V.stages); return `<form class="panel" data-form="move"><p><b>Move this deal to ${esc(to)}?</b></p><button class="primary">Move to ${esc(to)}</button>${cancel}</form>`; }
     if (ui.form === 'blocked') {
       const to = R.nextStage(d.stage, V.stages), open = R.gate(d).filter(g => g.state !== 'done'), svc = V.service.editable && !d.services.length && !R.servicesLocked(d);
       const why = R.checkMove(d, to, '-', V.stages);
@@ -146,7 +146,8 @@
     if (d.created) items.push(`<tr><td><time>${date(d.created)}</time></td><td><b>Deal created</b></td><td></td><td class="mute">${esc(d.createdBy)}</td></tr>`);
     return block('Stage history', 'clock', items.length ? `<table class="ledger" aria-label="Stage history"><tbody>${items.join('')}</tbody></table>` : '<p class="mute">No stage changes yet.</p>');
   }
-  const allDeals = () => db.live ? ui.list : db.list(ui.user);
+  const allDeals = () => ui.list;
+  const hue = s => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7); // a steady colour per name
   // Services asked for in the website enquiry, used only while the deal has none saved
   const requested = () => V.deal.services.length || !V.service.field || R.servicesLocked(V.deal) ? [] : R.requestedServices(V.deal.description, V.service.options);
 
@@ -191,22 +192,18 @@
       .map(([k, n, c]) => `<button data-tab="${k}" aria-pressed="${tab === k}">${n} <span>${c}</span></button>`).join('') + '</div>';
     const list = (items, none) => items.length ? '<ul class="records">' + items.join('') + '</ul>' : `<p class="mute">${none}</p>`;
     let body;
-    if (V.problems[tab]) body = `<p class="note bad">Could not be read. ${esc(V.problems[tab])}</p>`;
-    else if (tab === 'notes') body = (edit ? '<form class="add" data-form="note"><textarea name="text" rows="2" maxlength="30000" placeholder="Write a note" aria-label="Note" required></textarea><button class="primary">Add note</button></form>' : '') +
-      list(notes.map(n => `<li><span><b>${esc(n.title || 'Note')}</b><small>${esc(n.text)}</small></span></li>`), 'No notes yet.');
+    const failed = V.problems[tab] ? `<p class="note warm-note">The ${tab} on this deal could not be read from CRM (${esc(V.problems[tab])}). You can still add new ones. Reload to try again.</p>` : '';
+    if (tab === 'notes') body = (edit ? '<form class="add" data-form="note"><textarea name="text" rows="2" maxlength="30000" placeholder="Write a note" aria-label="Note" required></textarea><button class="primary">Add note</button></form>' : '') +
+      (failed || list(notes.map(n => `<li><span><b>${esc(n.title || 'Note')}</b><small>${esc(n.text)}</small></span></li>`), 'No notes yet.'));
     else if (tab === 'tasks') body = (edit ? '<form class="add" data-form="task"><input name="subject" maxlength="200" placeholder="Task" aria-label="Task" required><input type="date" name="due" aria-label="Due date" required><button class="primary">Add task</button></form>' : '') +
-      list(tasks.map(t => `<li><span><b>${esc(t.subject)}</b><small>${t.due ? 'Due ' + date(t.due) : 'No due date'}</small></span>${!t.open ? pill('Done', 'good') : edit ? `<button data-done="${esc(t.id)}">Complete</button>` : ''}</li>`), 'No tasks yet.');
+      (failed || list(tasks.map(t => `<li><span><b>${esc(t.subject)}</b><small>${t.due ? 'Due ' + date(t.due) : 'No due date'}</small></span>${!t.open ? pill('Done', 'good') : edit ? `<button data-done="${esc(t.id)}">Complete</button>` : ''}</li>`), 'No tasks yet.'));
     else body = (edit ? '<form class="add" data-form="file"><input type="file" name="file" aria-label="Choose a file" required><button class="primary">Upload</button></form>' : '') +
-      list(files.map(f => `<li><span><b>${esc(f.name)}</b><small>${Math.max(1, Math.ceil(f.size / 1024))} KB</small></span></li>`), 'No files attached.');
+      (failed || list(files.map(f => `<li><span><b>${esc(f.name)}</b><small>${Math.max(1, Math.ceil(f.size / 1024))} KB</small></span></li>`), 'No files attached.'));
     return `<section class="records-card">${bar}${body}</section>`;
   }
 
   /* ---------- page ---------- */
   function render() {
-    if (!db.live) {
-      $('#demo').hidden = false;
-      $('#demo').innerHTML = `<span>Sample data</span><label>View as <select id="user">${C.users.map(u => `<option value="${u.id}" ${u === ui.user ? 'selected' : ''}>${u.name} (${u.role}${u.country ? ', ' + u.country : ''})</option>`).join('')}</select></label>`;
-    }
     rail();
     $('#app').innerHTML = `<div class="hero ${ui.shown === ui.id ? '' : 'enter'}">` + header() + stageBar() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div class="stats">' + amountBlock() + closeBlock() + approvalBlock() + '</div>' +
@@ -233,7 +230,7 @@
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
     if ($('#items').dataset.key !== key) {
       $('#items').dataset.key = key;
-      $('#items').innerHTML = view.map(c => `<button data-deal="${esc(c.id)}" data-sub="${esc(c.sub)}"><span class="face" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span></button>`).join('') || '<p class="mute">No deals match.</p>';
+      $('#items').innerHTML = view.map(c => `<button data-deal="${esc(c.id)}" data-sub="${esc(c.sub)}"><span class="face" style="--h:${hue(c.name)}" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span></button>`).join('') || '<p class="mute">No deals match.</p>';
       if (shown.length > view.length) $('#items').insertAdjacentHTML('beforeend', '<p class="mute">Showing 200. Search to find others.</p>');
     }
     $('#items').querySelectorAll('button').forEach(b => b.setAttribute('aria-current', b.dataset.deal === ui.id ? 'true' : 'false'));
@@ -276,13 +273,6 @@
       $('#nextText').hidden = e.target.value !== 'other';
       if (e.target.value === 'other') $('#nextText input').focus();
     }
-    if (e.target.id !== 'user') return;
-    ui.user = C.users.find(u => u.id === e.target.value);
-    const list = db.list(ui.user);
-    if (!list.some(c => c.id === ui.id)) ui.id = list.length ? list[0].id : null;
-    if (ui.id) return reload().catch(fail);
-    rail();
-    $('#app').innerHTML = '<p class="mute">No deals for this user.</p>';
   });
   document.addEventListener('input', e => { if (e.target.id === 'find') rail(); });
   document.addEventListener('click', e => {
@@ -325,8 +315,8 @@
       return run(() => db.setService(V, chosen), 'Service saved: ' + (chosen.join(', ') || 'Not chosen') + '.');
     }
     if (kind === 'move') {
-      const to = R.nextStage(d.stage, V.stages), err = R.checkMove(d, to, f.evidence, V.stages);
-      return err ? say(err, true) : run(() => db.move(V, to, f.evidence.trim()), 'Moved to ' + to + '.');
+      const to = R.nextStage(d.stage, V.stages), err = R.checkMove(d, to, '-', V.stages);
+      return err ? say(err, true) : run(() => db.move(V, to), 'Moved to ' + to + '.');
     }
     if (kind === 'lost') {
       const err = R.checkLost(d, f.stage, f.reason, V.stages, V.reasons);
@@ -352,7 +342,8 @@
   });
 
   (async () => {
-    ui.id = db.live ? await db.start() : db.list(ui.user)[0].id;
+    if (!inCrm) { $('#app').innerHTML = '<div class="outside"><b>Open this widget inside Zoho CRM</b><p>It shows live CRM data only. There is no sample data.</p></div>'; return; }
+    ui.id = await db.start();
     if (!ui.id) { // web tab: no record is open, so let the user pick
       ui.list = await db.deals();
       ui.rail = true;

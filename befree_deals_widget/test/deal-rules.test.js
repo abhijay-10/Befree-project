@@ -90,7 +90,7 @@ test('stage moves', () => {
   const m = (o, to, ev) => R.checkMove(deal(o), to || 'Proposal presented', ev === undefined ? 'notes' : ev, options);
   assert.equal(m({}), null);
   assert.match(m({}, 'Agreement sent'), /one at a time/);
-  assert.match(m({}, null, ' '), /evidence/);
+  assert.equal(m({}, null, ' '), null); // no evidence is asked for
   assert.match(m({ services: [] }), /service line/);
   assert.match(m({ roles: null }), /Decision maker/); // an item that cannot be read blocks too
   assert.match(m({ accountOwner: null }), /assigned book/);

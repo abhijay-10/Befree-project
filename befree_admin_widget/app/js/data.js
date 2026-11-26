@@ -420,6 +420,7 @@ window.Data = (function () {
     });
     const total = t("total"), moved = t("moved"), created = t("created");
     return {
+      list: raws.reduce(function (all, r) { return all.concat(r.leadStats.list || []); }, []).sort(function (a, b) { return a.created < b.created ? 1 : -1; }),
       total: total, created: created, open: t("open"), lost: t("lost"), moved: moved, movedPeriod: t("movedPeriod"), otherConverted: t("otherConverted"),
       movedElsewhere: t("movedElsewhere"), movedMissing: t("movedMissing"),
       createdDelta: change(created, t("prevCreated")),
@@ -1130,6 +1131,11 @@ window.Data = (function () {
     const known = rows.convertedKnown;
     const leadStats = leads ? {
       total: leads.length,
+      // Every lead counted, so the totals can be checked against CRM
+      list: leads.map(function (l) {
+        return { name: l.name, country: code === OTHER_COUNTRY ? "Not set" : code, status: l[Ld.status] && l[Ld.status] !== "-None-" ? l[Ld.status] : "No status",
+                 created: localDay(toDate(l[Ld.created]) || new Date(0)), converted: !!l.converted, owner: text(l.Owner) };
+      }),
       created: leads.filter(function (l) { return within(l[Ld.created], since); }).length,
       prevCreated: since ? leads.filter(function (l) { return within(l[Ld.created], before, since); }).length : null,
       open: openLeads.length,

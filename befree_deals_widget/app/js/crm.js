@@ -1,4 +1,4 @@
-// Reads and writes Zoho CRM. Same functions as sample.js.
+// Reads and writes Zoho CRM.
 (function (root) {
   const C = root.BefreeConfig, R = root.BefreeRules, D = C.deal, X = C.extra;
   const id = v => (v && typeof v === 'object' ? v.id : v) || null;
@@ -35,6 +35,14 @@
   const written = text => (/country\s*:\s*([A-Za-z. ]+?)\s*(?=[\r\n,;|]|services|phone|email|message|$)/i.exec(text || '') || [])[1];
   // Website form records count as Website: a web form Lead Source, or the enquiry text in Description
   const webSource = (source, description) => /^web\s*-?\s*(site\s*)?forms?$/i.test(String(source || '').trim()) || (/services?\s+requested\s*(?:\(\d+\))?\s*:/i.test(description || '') && !/^(email|webinars?|events?|linkedin|google|social)/i.test(source || '')) ? 'Website' : source || '';
+  // Tasks of a deal through a CRM query, used when the Tasks related list cannot be read
+  async function tasksOf(dealId) {
+    if (!/^\d+$/.test(String(dealId))) return [];
+    const r = await ZOHO.CRM.API.coql({ select_query: `select Subject, Due_Date, Status from Tasks where What_Id = '${dealId}' limit 0, 200` });
+    if (r && r.data) return r.data;
+    if (failed(r)) throw new Error(why(r));
+    return [];
+  }
   async function saved(call) {
     const r = await call;
     const x = r && r.data && r.data[0];
@@ -128,7 +136,7 @@
       const [m, user, r] = await Promise.all([meta(), me(), one('Deals', dealId)]);
       const accountId = id(r[D.account]), createdById = id(r[D.createdBy]), ownerId = id(r[D.owner]);
       if (!R.canSee(user, { createdById, ownerId })) throw new Error('A BDE can open only the deals they raised or own.');
-      const [notes, tasks, files] = await Promise.all([safe('notes', related(dealId, 'Notes')), safe('tasks', related(dealId, 'Tasks')), safe('files', related(dealId, 'Attachments'))]);
+      const [notes, tasks, files] = await Promise.all([safe('notes', related(dealId, 'Notes')), safe('tasks', related(dealId, 'Tasks').catch(() => tasksOf(dealId))), safe('files', related(dealId, 'Attachments'))]);
       const [account, roles, history, seen] = await Promise.all([
         accountId ? safe('account', one('Accounts', accountId)) : null,
         safe('roles', related(dealId, 'Contact_Roles')),
@@ -178,11 +186,7 @@
       list.partial = !!all.partial;
       return list;
     },
-    // The evidence is kept as a note on the deal, and saved before the stage changes
-    async move(v, to, evidence) {
-      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Evidence: ' + to, Content: evidence }));
-      await update(v, { [D.stage]: to });
-    },
+    move: (v, to) => update(v, { [D.stage]: to }),
     addNote: (v, text) => saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Note', Content: text })),
     addTask: (v, subject, due) => saved(ZOHO.CRM.API.insertRecord({ Entity: 'Tasks', APIData: { Subject: subject, Due_Date: due, What_Id: v.deal.id, $se_module: 'Deals', Status: 'Not Started' }, Trigger: ['workflow'] })),
     closeTask: (v, taskId) => saved(ZOHO.CRM.API.updateRecord({ Entity: 'Tasks', APIData: { id: taskId, Status: 'Completed' }, Trigger: ['workflow'] })),
@@ -190,7 +194,6 @@
     lose: (v, stage, reason) => update(v, { [D.stage]: stage, [D.lostReason]: reason }),
     // "to" is the stage the next step moves the deal to, if any
     async nextStep(v, text, to) {
-      if (to) await saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Evidence: ' + to, Content: 'Moved from the next step: ' + text }));
       await update(v, { [D.nextStep]: text || null, ...(to ? { [D.stage]: to } : {}), ...(X.nextStepUpdated ? { [X.nextStepUpdated]: new Date().toLocaleDateString('en-CA') } : {}) });
     },
     closeDate: (v, date) => update(v, { [D.closeDate]: date }),

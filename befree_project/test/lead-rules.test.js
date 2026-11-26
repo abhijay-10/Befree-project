@@ -3,6 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const R = require('../app/js/rules.js');
 const C = require('../app/js/config.js');
+// Example staff for these tests only. The real list in config.js starts empty.
+C.users.push(...[['revops', 'RevOps', 'Admin', null], ['sam', 'Sam', 'BDM', 'UK'], ['tina', 'Tina', 'BDE', 'UK'], ['brad', 'Brad', 'BDM', 'US'],
+  ['cooper', 'Cooper', 'BDE', 'US'], ['ross', 'Ross', 'BDM', 'AU'], ['rick', 'Rick', 'BDE', 'AU'], ['marketing', 'Marketing', 'Marketing', null]]
+  .map(([id, name, role, country]) => ({ id, name, role, country })));
 
 const now = new Date(2026, 10, 24, 12); // Tuesday
 const ago = n => new Date(2026, 10, 24 - n, 9);

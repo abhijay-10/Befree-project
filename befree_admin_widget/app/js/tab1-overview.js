@@ -191,6 +191,26 @@
     card.body.append(strip, monthBars(l.months, series), App.legend(series.map(function (s) {
       return { label: s.name, color: s.color };
     }), "ov-legend"));
+    // The leads behind "Total leads", to compare with the Leads module in CRM
+    if (l.list && l.list.length) {
+      const box = el("details", "ov-lead-list");
+      box.appendChild(el("summary", "", "Show the " + plural(l.list.length, "lead") + " counted"));
+      const table = el("table", "ov-table");
+      const head = el("tr");
+      ["Lead", "Country", "Status", "Created", "Converted", "Owner"].forEach(function (c) { const th = el("th", "", c); th.scope = "col"; head.appendChild(th); });
+      const thead = el("thead"), tbody = el("tbody");
+      thead.appendChild(head);
+      l.list.forEach(function (x) {
+        const tr = el("tr", "is-plain");
+        [x.name, x.country, x.status, x.created, x.converted ? "Yes" : "No", x.owner || "—"].forEach(function (v) { tr.appendChild(el("td", "", v)); });
+        tbody.appendChild(tr);
+      });
+      table.append(thead, tbody);
+      const wrap = el("div", "ov-table-wrap");
+      wrap.appendChild(table);
+      box.append(el("p", "ov-muted", "Converted leads are included: CRM moves them out of the Leads list, but they were still created."), wrap);
+      card.body.appendChild(box);
+    }
     return card;
   }
 

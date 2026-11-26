@@ -1,10 +1,6 @@
 // Settings shared by the Befree widgets. Change names and lists here, not in the other files.
 (function (root) {
   const C = {
-    // 'auto': live data inside Zoho CRM, sample data in a normal browser tab.
-    // 'demo': always sample data, even inside CRM.
-    mode: 'auto',
-
     // CRM module API names
     modules: { contact: 'Contacts', account: 'Accounts', deal: 'Deals', touch: 'Touches', task: 'Tasks', meeting: 'Events' },
 
@@ -58,16 +54,9 @@
     profiles: { Administrator: 'Admin', Admin: 'Admin', RevOps: 'Admin', BDM: 'BDM', BDE: 'BDE', Marketing: 'Marketing' },
 
     // R8a
-    users: [
-      { id: 'revops', name: 'RevOps', role: 'Admin', country: null },
-      { id: 'sam', name: 'Sam', role: 'BDM', country: 'UK' },
-      { id: 'tina', name: 'Tina', role: 'BDE', country: 'UK' },
-      { id: 'brad', name: 'Brad', role: 'BDM', country: 'US' },
-      { id: 'cooper', name: 'Cooper', role: 'BDE', country: 'US' },
-      { id: 'ross', name: 'Ross', role: 'BDM', country: 'AU' },
-      { id: 'rick', name: 'Rick', role: 'BDE', country: 'AU' },
-      { id: 'marketing', name: 'Marketing', role: 'Marketing', country: null }
-    ],
+    // Fill in your real staff, for example { id: 'zoho user id', name: 'Full name', role: 'BDM', country: 'UK' }.
+    // Roles: Admin, BDM, BDE, Marketing. Used to suggest who should follow up a lead.
+    users: [],
 
     // R2
     stages: { 'Qualified': 10, 'Needs confirmed': 25, 'Proposal presented': 50, 'Agreement sent': 75, 'Verbal commitment': 90, 'Closed-won': 100, 'Closed-lost': 0 },
@@ -80,7 +69,6 @@
     // R4
     outcomes: ['Accepted', 'Rejected', 'No-show'],
     maxReschedules: 2,
-    serviceLines: ['Service line A', 'Service line B', 'Service line C'], // R9 PLACEHOLDER, sample data only
     rejectReasons: ['Not a fit', 'No need', 'Wrong contact', 'Other'] // R9 PLACEHOLDER
   };
   if (typeof module !== 'undefined') module.exports = C; else root.BefreeConfig = C;

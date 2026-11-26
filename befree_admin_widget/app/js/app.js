@@ -41,6 +41,16 @@ window.App = (function () {
       if (started && started.then) started.then(connected, reject);
     });
     zohoReady.catch(function (err) { console.warn("[widget]", err.message); });
+    // The signed-in user's initials in the header
+    zohoReady.then(function () { return ZOHO.CRM.CONFIG.getCurrentUser(); }).then(function (r) {
+      const u = r && r.users && r.users[0], name = u && (u.full_name || u.email);
+      if (!name) return;
+      const box = document.getElementById("user-avatar");
+      box.textContent = name.split(/\s+/).map(function (w) { return w.charAt(0); }).join("").slice(0, 2).toUpperCase();
+      box.title = name;
+      box.setAttribute("aria-label", "Signed in as " + name);
+      box.hidden = false;
+    }).catch(function () { /* the header works without it */ });
   }
 
   function withTimeout(promise) {

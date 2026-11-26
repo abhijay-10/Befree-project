@@ -1,10 +1,6 @@
 // Settings for the Befree Deal widget. Change names and lists here, not in the other files.
 (function (root) {
   const C = {
-    // 'auto': live data inside Zoho CRM, sample data in a normal browser tab.
-    // 'demo': always sample data, even inside CRM.
-    mode: 'auto',
-
     // DEALS MODULE: field API names taken from your CRM
     deal: {
       name: 'Deal_Name', account: 'Account_Name', contact: 'Contact_Name', owner: 'Owner', createdBy: 'Created_By',
@@ -49,16 +45,9 @@
     profiles: { Administrator: 'Admin', Admin: 'Admin', RevOps: 'Admin', BDM: 'BDM', BDE: 'BDE', Marketing: 'Marketing' },
 
     // R8a
-    users: [
-      { id: 'revops', name: 'RevOps', role: 'Admin', country: null },
-      { id: 'sam', name: 'Sam', role: 'BDM', country: 'UK' },
-      { id: 'tina', name: 'Tina', role: 'BDE', country: 'UK' },
-      { id: 'brad', name: 'Brad', role: 'BDM', country: 'US' },
-      { id: 'cooper', name: 'Cooper', role: 'BDE', country: 'US' },
-      { id: 'ross', name: 'Ross', role: 'BDM', country: 'AU' },
-      { id: 'rick', name: 'Rick', role: 'BDE', country: 'AU' },
-      { id: 'marketing', name: 'Marketing', role: 'Marketing', country: null }
-    ],
+    // Fill in your real staff, for example { id: 'zoho user id', name: 'Full name', role: 'BDM', country: 'UK' }.
+    // Roles: Admin, BDM, BDE, Marketing. Used to suggest who should follow up a lead.
+    users: [],
 
     // R2. Stage names are compared without spaces, hyphens or capitals.
     stages: [
@@ -66,10 +55,8 @@
       { name: 'Agreement sent', prob: 75 }, { name: 'Verbal commitment', prob: 90 }, { name: 'Closed-won', prob: 100 }, { name: 'Closed-lost', prob: 0 }
     ],
 
-    // R9 PLACEHOLDERS, used for sample data and for rejecting a deal
+    // R9 PLACEHOLDER, used for rejecting a deal
     rejectReasons: ['Not a fit', 'No need', 'Wrong contact', 'Other'],
-    sampleLostReasons: ['Price', 'Competitor', 'No decision', 'Timing', 'Other'],
-    sampleServices: ['Accounting Services', 'Payroll Services', 'Virtual Admin Services', 'Bookkeeping Services', 'Tax Services'],
 
     // Writing the next stage as the Next step moves the deal there.
     // true: only when qualification is complete, as Befree's rules require (R3, step 7). false: without that check.

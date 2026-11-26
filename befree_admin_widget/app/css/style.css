@@ -579,3 +579,5 @@ button { cursor: pointer; }
   .nc-stats, .nc-stats-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .refresh-bar { height: auto; top: 6px; }
 }
+
+.avatar[hidden] { display: none; }

@@ -85,6 +85,7 @@
   }
   const needsReview = d => !isClosed(d.stage) && (pushes(d) || 0) >= C.maxPushes;
 
+  // "evidence" is no longer asked for; the argument is kept so callers do not change
   function checkMove(d, to, evidence, options, skipGate) {
     if (isClosed(d.stage)) return 'This deal is closed.';
     if (to !== nextStage(d.stage, options)) return 'Stages move one at a time.';
@@ -93,7 +94,6 @@
     if (d.acceptance === 'Pending') return 'The BDM has not accepted this deal yet.';
     if (d.acceptance === 'Rejected') return 'The BDM rejected this deal.';
     if (d.approval === 'Pending' || d.approval === 'Rejected') return 'Sales Manager approval is ' + d.approval.toLowerCase() + '.';
-    if (!filled(evidence)) return 'Record the evidence for this stage.';
     return null;
   }
   // "need analysis" means the stage "Needs Analysis". "Proposal" or "Price Quote" mean "Proposal/Price Quote".
