@@ -1,36 +1,49 @@
-/* Visual polish for five widgets. Every selector starts from .pz-card, so nothing else changes. */
-.card.pz-card { --accent: #2563EB; position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, #fff), #fff 96px); box-shadow: var(--ui-shadow, 0 1px 2px rgba(16, 24, 40, .05));
-  transition: transform .2s ease, box-shadow .2s ease; animation: pz-in .45s cubic-bezier(.2, .7, .3, 1) backwards; }
+/* Visual polish for the Admin widgets. Every widget rule starts from .pz-card, so other cards are untouched. */
+:root {
+  --pz-radius: 16px; --pz-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 10px 26px -18px rgba(30, 40, 90, .22);
+  --pz-shadow-hover: 0 2px 4px rgba(16, 24, 40, .06), 0 18px 36px -18px rgba(30, 40, 90, .34);
+  --pz-track: #eef0f7; --pz-ease: cubic-bezier(.2, .7, .3, 1);
+}
+
+/* ===================== Cards ===================== */
+.card.pz-card { --accent: #2563EB; position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--pz-radius);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, #fff), #fff 96px); box-shadow: var(--pz-shadow);
+  transition: transform .2s ease, box-shadow .2s ease; animation: pz-in .45s var(--pz-ease) backwards; }
 .card.pz-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--accent); opacity: 1; }
-.card.pz-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--accent) 55%, #1e2858); }
-.card.pz-country, .card.pz-leads { animation-delay: 60ms; }
-.card.pz-service { animation-delay: 120ms; }
+.card.pz-card:hover { transform: translateY(-3px); box-shadow: var(--pz-shadow-hover); }
+.card.pz-country, .card.pz-leads, .card.pz-activity, .card.pz-wonlost { animation-delay: 60ms; }
+.card.pz-service, .card.pz-revenue { animation-delay: 120ms; }
 @keyframes pz-in { from { opacity: 0; transform: translateY(12px); } }
 .pz-card > .card-body { flex: 1; display: flex; flex-direction: column; }
 .pz-card .card-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 700; }
 .pz-card .card-subtitle { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
 .pz-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 13%, #fff); color: var(--accent); }
 .pz-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.pz-card :is(strong, b, .hbar-value, .rp-attr-value, .mk-lead-value, .ov-chart-month) { font-variant-numeric: tabular-nums; }
 
-/* Rows: hover highlight, numbers that line up */
+/* Legends as small pills with a coloured dot */
+.pz-card :is(.rp-legend-item, .ov-legend-item) { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fff; font-size: 12px; color: #374151; }
+.pz-card :is(.rp-dot, .ov-legend-dot) { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ===================== Bar rows ===================== */
 .pz-card .pz-row { --row: var(--accent); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 10px; transition: background-color .15s; }
 .pz-card .pz-row:hover { background: color-mix(in srgb, var(--row) 7%, transparent); }
-.pz-card .pz-row:hover :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span, .ov-funnel-bar::before) { filter: brightness(1.12); }
-.pz-card :is(.hbar-value, .rp-attr-value, .mk-lead-value) { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.pz-card .pz-row:hover :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span) { filter: brightness(1.12); }
+.pz-card :is(.hbar-value, .rp-attr-value, .mk-lead-value) { font-weight: 700; text-align: right; }
 .pz-card .pz-row.is-zero :is(.hbar-label, .hbar-value, .rp-attr-label, .rp-attr-value) { color: #9aa1b4; font-weight: 500; }
 .pz-fade { animation: pz-fade .6s ease-out; }
 @keyframes pz-fade { from { opacity: 0; } }
 
-/* Bars: soft gradient, round ends, light track, growing from the left */
+/* Soft gradient bars with round ends on a light track, growing from the left */
 .pz-card .hbar { grid-template-columns: minmax(80px, 170px) minmax(0, 1fr) auto; }
-.pz-card .hbar-track { height: 9px; background: #eef0f7; }
+.pz-card .hbar-track { height: 9px; background: var(--pz-track); }
 .pz-card .hbar-fill { background: linear-gradient(90deg, color-mix(in srgb, var(--row) 55%, #fff), var(--row)) !important; border-radius: 99px; }
-.pz-channel .rp-attr-bar { height: 9px; border-radius: 99px; background: linear-gradient(90deg, #93A5F8, #3B49DF) !important; }
-.pz-channel .rp-attr-row:not(.rp-attr-total) .rp-attr-bars { justify-content: center; height: 9px; border-radius: 99px; background: #eef0f7; }
-.pz-leads .mk-lead-bar { border-radius: 99px; background: #eef0f7; }
+:is(.pz-channel, .pz-attribution) .rp-attr-bar { height: 9px; border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--row) 50%, #fff), var(--row)) !important; }
+:is(.pz-channel, .pz-attribution) .rp-attr-row:not(.rp-attr-total) .rp-attr-bars { justify-content: center; height: 9px; border-radius: 99px; background: var(--pz-track); }
+.pz-leads .mk-lead-bar { border-radius: 99px; background: var(--pz-track); }
 .pz-leads .mk-lead-bar > span { border-radius: 99px; background: linear-gradient(90deg, #C3D0FB, #7E98EE); }
 .pz-leads .mk-lead-bar > .mk-lead-moved { background: linear-gradient(90deg, #5FD0A2, #12925F); }
+.pz-chip { display: inline-block; margin-left: 2px; padding: 1px 8px; border-radius: 99px; background: #e3f6ed; color: #0d6b44; font-size: 11.5px; font-weight: 700; }
 .pz-card :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span) { transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
 @keyframes pz-grow { from { transform: scaleX(0); } }
 
@@ -38,20 +51,86 @@
 .pz-stage .ov-funnel-bar[data-check="bucket"] { position: relative; isolation: isolate; border-radius: 99px; background: transparent !important; }
 .pz-stage .ov-funnel-bar::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 99px; background: linear-gradient(90deg, var(--row), color-mix(in srgb, var(--row) 78%, #fff)); transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
 .pz-stage .ov-funnel-bar::after { display: none; }
-.pz-stage .ov-funnel-bar.is-empty::before { background: #eef0f7; }
-.pz-badge { display: inline-block; min-width: 40px; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--row) 13%, #fff); color: var(--row); font-size: 11.5px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.pz-stage .ov-funnel-bar.is-empty::before { background: var(--pz-track); }
+.pz-badge { display: inline-block; min-width: 40px; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--row) 13%, #fff); color: var(--row); font-size: 11.5px; font-weight: 700; text-align: center; }
 
-/* Totals pinned to the bottom */
+/* Totals in a soft footer pill, pinned to the bottom */
 .pz-stage .ov-stage-total { margin: auto 0 0; align-self: flex-start; padding: 7px 14px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 9%, #fff); color: color-mix(in srgb, var(--accent) 80%, #111); }
 .pz-stage .ov-funnel-row:last-of-type { margin-bottom: 14px; }
-.pz-channel .rp-attr-total { margin: auto -8px 0; padding: 10px 8px; border-top: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, #fff); }
-.pz-channel .rp-legend .rp-dot { background: #3B49DF !important; border-radius: 50%; }
+:is(.pz-channel, .pz-attribution) .rp-attr-total { margin: auto -8px 0; padding: 10px 8px; border-top: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, #fff); }
+
+/* ===================== Deals won vs lost ===================== */
+.pz-wonlost .nc-stats { grid-auto-rows: 1fr; }
+.pz-stat { --s: #4F46E5; position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--s) 18%, #fff); background: color-mix(in srgb, var(--s) 6%, #fff); }
+.pz-stat::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--s); }
+.pz-stat.is-won { --s: #16A06B; } .pz-stat.is-lost { --s: #E11D48; } .pz-stat.is-rate { --s: #4F46E5; }
+.pz-stat strong { display: block; margin: 2px 0; font-size: 22px; font-weight: 800; color: color-mix(in srgb, var(--s) 70%, #111); }
+.pz-stat small { color: var(--muted); }
+/* Revenue / Won vs lost: a segmented control with a sliding pill */
+.pz-wonlost .ov-toggle { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 0; border-radius: 10px; background: #eef0f6; isolation: isolate; }
+.pz-wonlost .ov-toggle::before { content: ""; position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(17, 24, 39, .18); transition: transform .25s var(--pz-ease); }
+.pz-wonlost .ov-toggle:has(button:last-child[aria-pressed="true"])::before { transform: translateX(100%); }
+.pz-wonlost .ov-toggle button, .pz-wonlost .ov-toggle button[aria-pressed="true"] { background: transparent; text-align: center; font-weight: 600; }
+.pz-wonlost .ov-toggle button[aria-pressed="true"] { color: #111827; }
+/* Bars: rounded tops, soft vertical gradients, growing from the bottom; the other bar dims on hover */
+.pz-wonlost .ov-chart-bar { border-radius: 8px 8px 3px 3px; transform-origin: bottom; transition: opacity .15s, filter .15s; animation: pz-rise .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes pz-rise { from { transform: scaleY(0); } }
+.pz-wonlost .ov-chart-bar.is-won { background: linear-gradient(180deg, #4fd29b, #12925F) !important; }
+.pz-wonlost .ov-chart-bar.is-lost { background: linear-gradient(180deg, #fb8fa8, #E11D48) !important; }
+.pz-wonlost .ov-chart-bar.is-revenue { background: linear-gradient(180deg, #8aa6ff, #2352E5) !important; }
+.pz-wonlost .ov-chart-bar.is-empty { height: 3px !important; border-radius: 3px; background: #dfe3ee !important; opacity: .9; }
+.pz-wonlost .ov-chart-bars:hover .ov-chart-bar:not(:hover) { opacity: .45; }
+.pz-wonlost .ov-chart-bar:hover { filter: brightness(1.08); }
+.pz-wonlost .ov-chart-month { color: #8a93a6; font-size: 11.5px; }
+
+/* ===================== Recent activity ===================== */
+.pz-activity .card-body { max-height: 420px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #cfd5e3 transparent; }
+.pz-activity .card-body::-webkit-scrollbar { width: 6px; }
+.pz-activity .card-body::-webkit-scrollbar-thumb { border-radius: 6px; background: #cfd5e3; }
+.pz-activity .ov-activity { transition: transform .18s ease, background-color .18s ease; animation: pz-in .4s var(--pz-ease) backwards; animation-delay: calc(var(--i, 0) * 60ms); }
+.pz-activity .ov-activity:hover { transform: translateX(3px); background: color-mix(in srgb, var(--edge) 11%, #fff); }
+.pz-activity .ov-activity .ov-tile { border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px color-mix(in srgb, var(--edge) 22%, #fff); color: var(--edge); }
+.pz-activity .ov-activity-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.pz-time { margin-left: auto; padding: 1px 8px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1px var(--border); color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+/* ===================== Sales by owner ===================== */
+.pz-owner .rp-owner { margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 10px; transition: background-color .15s; }
+.pz-owner .rp-owner:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.pz-owner .rp-owner { grid-template-columns: 170px minmax(0, 1fr) auto; }
+.pz-owner .rp-owner-name { display: flex; align-items: center; gap: 8px; }
+.pz-owner .rp-owner-name::before { content: attr(data-initials); flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 15%, #fff); color: color-mix(in srgb, var(--accent) 80%, #111); font-size: 10.5px; font-weight: 700; }
+.pz-owner .rp-owner-bar { gap: 2px; height: 11px; border-radius: 99px; background: var(--pz-track); }
+.pz-owner .rp-owner-bar > span { border-radius: 99px; transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+.pz-owner .rp-owner-bar .is-won { background: linear-gradient(90deg, #4fd29b, #12925F); }
+.pz-owner .rp-owner-bar .is-open { background: linear-gradient(90deg, #F7CE76, #E8A21C); }
+.pz-owner .rp-owner-value b { color: #0d7a4f; font-weight: 800; }
+
+/* ===================== Revenue trend ===================== */
+.pz-revenue .rp-line canvas { animation: pz-reveal 1s ease-out backwards; }
+@keyframes pz-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.pz-ring { position: absolute; z-index: 2; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .55), 0 0 12px 2px rgba(37, 99, 235, .35); animation: pz-ring 1.8s ease-out infinite; }
+@keyframes pz-ring { 0% { transform: scale(.7); opacity: .9; } 100% { transform: scale(2.4); opacity: 0; } }
+
+/* ===================== KPI cards: a bit more motion ===================== */
+.mk-kpi::before, .ov-kpi::before { transform-origin: left center; animation: pz-sweep .7s var(--pz-ease) .15s backwards; }
+@keyframes pz-sweep { from { transform: scaleX(0); } }
+.mk-kpi:hover::before { transform: scaleY(1.7); }
+.mk-kpi::after, .ov-kpi::after { content: ""; position: absolute; inset: 0; height: auto; z-index: 2; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); animation: none; opacity: 0; }
+.mk-kpi:hover::after, .ov-kpi:hover::after { opacity: 1; animation: pz-shine .8s ease-out 1 forwards; }
+@keyframes pz-shine { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+.ov-kpi:hover { transform: translateY(-4px); box-shadow: var(--pz-shadow-hover); }
+.ov-kpi:hover .ov-tile, .mk-kpi:hover .mk-kpi-icon { transform: translateY(-2px) scale(1.07); }
 
 @media (max-width: 560px) {
   .pz-card .hbar { grid-template-columns: minmax(70px, 120px) minmax(0, 1fr) auto; gap: 8px; }
-  .pz-channel .rp-attr-row { grid-template-columns: 90px minmax(0, 1fr) auto; }
+  :is(.pz-channel, .pz-attribution) .rp-attr-row { grid-template-columns: 90px minmax(0, 1fr) auto; }
+  .pz-owner .rp-owner { grid-template-columns: 110px minmax(0, 1fr); }
+  .pz-owner .rp-owner-value { grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card.pz-card, .pz-card *, .pz-card *::before { animation: none !important; transition: none !important; }
-  .card.pz-card:hover { transform: none; }
+  .card.pz-card, .pz-card *, .pz-card *::before, .pz-ring, .mk-kpi::before, .ov-kpi::before, .mk-kpi::after, .ov-kpi::after { animation: none !important; transition: none !important; }
+  .card.pz-card:hover, .pz-activity .ov-activity:hover, .ov-kpi:hover { transform: none; }
+  .pz-ring { display: none; }
 }
