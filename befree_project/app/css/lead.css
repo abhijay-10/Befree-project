@@ -580,3 +580,17 @@ h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
 #leads > p.mute:only-child::before { content: ""; display: block; width: 34px; height: 34px; margin: 0 auto 8px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90ab' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4M8.5 11h5'/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
+
+/* ---------- Action row: every button on one line ----------
+   Slightly tighter buttons so the whole row (including Mark as junk and Opt out) fits on one line.
+   When the card is too narrow for that, Mark as junk and Opt out move to their own line, starting
+   at the same left edge as Book meeting, instead of hanging at the right under the other buttons. */
+.hero { container: lead-hero / inline-size; }
+.actions { flex-wrap: nowrap; gap: 6px; }
+.actions > button, .end-group > * { flex: none; padding: 0 11px; gap: 7px; white-space: nowrap; }
+.actions > button.icon-only { padding: 0; }
+.end-group { flex: none; gap: 6px; }
+@container lead-hero (max-width: 1130px) {
+  .actions { flex-wrap: wrap; row-gap: 10px; }
+  .end-group { flex-basis: 100%; margin-left: 0; }
+}

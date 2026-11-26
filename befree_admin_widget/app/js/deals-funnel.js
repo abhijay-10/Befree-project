@@ -10,7 +10,6 @@ window.DealsFunnel = (function () {
   const PALETTE = ["#7C5CE0", "#3B6FF0", "#14A89A", "#F0932B", "#E0559A"]; // purple, blue, teal, orange, pink
   const NS = "http://www.w3.org/2000/svg";
   let period = "thisMonth";
-  let open = false; // drop-off list
 
   const el = function (tag, cls, text) {
     const n = document.createElement(tag);
@@ -73,59 +72,37 @@ window.DealsFunnel = (function () {
     setTimeout(function () { node.textContent = String(target); }, 900); // the true value, with or without animation
   }
 
-  // Stacked trapezoids with a soft gradient and a lighter oval top. Width follows the count, with a minimum.
+  /*
+   * A classic funnel: one cone that narrows evenly from a wide top to a narrow neck, cut into one band per stage.
+   * The shape is fixed (it does not follow the counts), so it always reads as a funnel; each band shows its count.
+   */
   function funnel(rows, colour) {
-    const W = 300, step = 44, height = rows.length * step + 22;
-    const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.count; })));
+    const W = 320, mid = W / 2, topW = 304, neckW = 62, band = 46, gap = 3, rim = 11;
+    const H = rows.length * band, height = rim + H + 4;
+    const widthAt = function (y) { return topW - (topW - neckW) * (y / H); };
     const root = svg("svg", { viewBox: "0 0 " + W + " " + height, class: "df-svg", role: "img",
       "aria-label": rows.map(function (r) { return r.name + " " + r.count; }).join(", ") });
     const defs = svg("defs");
     root.appendChild(defs);
     rows.forEach(function (r, i) {
-      const top = 70 + (W - 82) * (r.count / max), bottom = top * 0.84, y = 12 + i * step, mid = W / 2;
+      const y0 = i * band, y1 = y0 + band - gap, w0 = widthAt(y0), w1 = widthAt(y1);
+      const top = rim + y0, bottom = rim + y1;
       const grad = svg("linearGradient", { id: "df-grad-" + i, x1: "0", x2: "1", y1: "0", y2: "0" });
-      grad.append(svg("stop", { offset: "0", "stop-color": mix(colour[i], "#ffffff", .12) }),
-        svg("stop", { offset: ".55", "stop-color": colour[i] }), svg("stop", { offset: "1", "stop-color": mix(colour[i], "#000000", .18) }));
+      grad.append(svg("stop", { offset: "0", "stop-color": mix(colour[i], "#ffffff", .14) }),
+        svg("stop", { offset: ".5", "stop-color": colour[i] }), svg("stop", { offset: "1", "stop-color": mix(colour[i], "#000000", .16) }));
       defs.appendChild(grad);
       const g = svg("g", { class: "df-seg", "data-i": i });
-      g.style.animationDelay = (i * 80) + "ms";
-      g.append(
-        svg("path", { fill: "url(#df-grad-" + i + ")", d: "M" + (mid - top / 2) + " " + y + " L" + (mid + top / 2) + " " + y +
-          " L" + (mid + bottom / 2) + " " + (y + step - 12) + " Q" + mid + " " + (y + step - 2) + " " + (mid - bottom / 2) + " " + (y + step - 12) + " Z" }),
-        svg("ellipse", { cx: mid, cy: y, rx: top / 2, ry: 7, fill: mix(colour[i], "#ffffff", .42) })
-      );
+      g.style.animationDelay = (i * 70) + "ms";
+      g.appendChild(svg("path", { fill: "url(#df-grad-" + i + ")", d: "M" + (mid - w0 / 2) + " " + top + " L" + (mid + w0 / 2) + " " + top +
+        " L" + (mid + w1 / 2) + " " + bottom + " L" + (mid - w1 / 2) + " " + bottom + " Z" }));
+      // Only the mouth of the funnel gets an oval rim
+      if (i === 0) g.appendChild(svg("ellipse", { cx: mid, cy: top, rx: w0 / 2, ry: rim - 2, fill: mix(colour[0], "#ffffff", .45) }));
+      const label = svg("text", { x: mid, y: (top + bottom) / 2 + (i === 0 ? 4 : 0), class: "df-count", "text-anchor": "middle", "dominant-baseline": "central" });
+      label.textContent = String(r.count);
+      g.appendChild(label);
       root.appendChild(g);
     });
     return root;
-  }
-
-  function conversionBar(rows) {
-    const first = rows[0], last = rows[rows.length - 1];
-    const box = el("div", "df-conv");
-    const head = el("button", "df-conv-head");
-    head.type = "button";
-    head.setAttribute("aria-expanded", String(open));
-    head.append(el("span", "", "Conversion Rate"), el("strong", "", first && first.count ? percent(last.count, first.count) : "—"));
-    const chevron = svg("svg", { viewBox: "0 0 24 24", class: "df-chevron", "aria-hidden": "true" });
-    chevron.appendChild(svg("path", { d: "m6 9 6 6 6-6" }));
-    head.appendChild(chevron);
-    const list = el("ul", "df-drop");
-    list.hidden = !open;
-    rows.slice(1).forEach(function (r, i) {
-      const prev = rows[i];
-      const change = prev.count ? (r.count - prev.count) / prev.count * 100 : null;
-      const li = el("li");
-      li.append(el("span", "", prev.name + " → " + r.name),
-        el("b", !change ? "is-flat" : change < 0 ? "is-down" : "", change === null ? "—" : change < 0 ? Math.abs(change).toFixed(1) + "% drop" : change > 0 ? change.toFixed(1) + "% more" : "no change"));
-      list.appendChild(li);
-    });
-    head.addEventListener("click", function () {
-      open = !open;
-      head.setAttribute("aria-expanded", String(open));
-      list.hidden = !open;
-    });
-    box.append(head, el("p", "df-conv-note", first && last ? last.name + " ÷ " + first.name : ""), list);
-    return box;
   }
 
   function render(data, state) {
@@ -194,7 +171,7 @@ window.DealsFunnel = (function () {
       legend.addEventListener("focusin", function (e) { light(index(e), e); });
       legend.addEventListener("focusout", function (e) { light(null, e); });
       main.append(shape, legend, tip);
-      body.append(main, conversionBar(rows));
+      body.append(main);
     }
 
     select.addEventListener("change", function () { period = select.value; draw(); });

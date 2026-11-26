@@ -45,8 +45,7 @@
     const lost = R.isLost(d.stage) ? ' ' + pill(d.stage, 'bad') : R.isWon(d.stage) ? ' ' + pill(d.stage, 'good') : '';
     return `<header class="ticket"><div class="who"><h1>${esc(d.name)}${lost}</h1>
       <p class="people">${[showAccount(d) ? link('Accounts', d.accountId, d.accountName) : '', d.contactName ? link('Contacts', d.contactId, d.contactName) : '<span class="mute">No contact person</span>'].filter(Boolean).join('<span class="sep"></span>')}</p></div>
-      <dl class="strip"><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
-      <div><dt>Service</dt><dd>${esc(d.services.join(', ') || 'Not chosen')}</dd></div><div><dt>Probability</dt><dd>${d.prob === null ? 'Not set' : d.prob + '%'}</dd></div></dl></header>`;
+      <dl class="strip"><div><dt>Service</dt><dd>${esc(d.services.join(', ') || 'Not chosen')}</dd></div><div><dt>Probability</dt><dd>${d.prob === null ? 'Not set' : d.prob + '%'}</dd></div></dl></header>`;
   }
   function stageBar() {
     const d = V.deal, path = R.path(V.stages), at = path.indexOf(d.stage), won = R.isWon(d.stage), lost = R.isLost(d.stage);
@@ -207,12 +206,18 @@
   }
 
   /* ---------- page ---------- */
+  // Deal owner, shown once at the bottom of the page
+  function ownerFooter() {
+    const name = V.deal.owner || 'Unassigned';
+    return `<footer class="owner-foot"><span class="face" aria-hidden="true">${esc(initials(name))}</span><span><small>Deal owner</small><b>${esc(name)}</b></span></footer>`;
+  }
   function render() {
     rail();
     $('#app').classList.toggle('fresh', ui.shown !== ui.id);
     $('#app').innerHTML = `<div class="hero ${ui.shown === ui.id ? '' : 'enter'}">` + header() + stageBar() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div class="stats">' + closeBlock() + approvalBlock() + amountBlock() + '</div>' +
-      '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + '</div></div>';
+      '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + '</div></div>' +
+      ownerFooter();
     ui.shown = ui.id;
   }
   function rail() {

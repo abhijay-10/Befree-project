@@ -76,7 +76,7 @@ h1 .pill { font-size: 13px; letter-spacing: 0; }
 .stub::after { bottom: -8px; }
 .stub > div { margin-left: auto; }
 .stub dd { color: var(--teal-dark); font: 600 clamp(34px, 5.2cqw, 54px)/1.05 var(--num); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.strip { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2.6fr) minmax(110px, .8fr); background: var(--card); border-top: 1px solid var(--rule-dark); border-bottom: 1px solid var(--rule); }
+.strip { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(110px, .8fr); background: var(--card); border-top: 1px solid var(--rule-dark); border-bottom: 1px solid var(--rule); }
 .strip > div { min-width: 0; padding: 11px 28px 12px; }
 .strip > div + div { border-left: 1px solid var(--rule); }
 .strip dd { font-weight: 600; line-height: 1.35; }
@@ -241,7 +241,6 @@ h2 svg { color: var(--teal); }
 }
 @container (max-width: 520px) {
   .strip { grid-template-columns: minmax(0, 1fr) auto; }
-  .strip > div:nth-child(2) { grid-column: 1 / -1; grid-row: 2; border-left: 0; border-top: 1px solid var(--rule); }
   .actions button, .actions button.quiet { flex: 1 1 100%; margin: 0; }
   .actions button.quiet { margin-top: 6px; border-top: 1px solid var(--rule-dark); border-radius: 0 0 var(--r-sm) var(--r-sm); }
 }
@@ -551,3 +550,10 @@ button.primary:hover:not(:disabled) { background: #0b5550; border-color: #0b5550
 #items > p.mute:only-child::before { content: ""; display: block; width: 34px; height: 34px; margin: 0 auto 8px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90ab' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='m20 20-4-4M8.5 11h5'/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (max-width: 720px) { .skel { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
+
+/* ---------- Deal owner, at the bottom of the page ---------- */
+.owner-foot { display: flex; align-items: center; gap: 12px; margin-top: 24px; padding: 14px 20px; background: var(--card); border: 1px solid var(--rule-dark); border-radius: var(--r); box-shadow: var(--lift); }
+.owner-foot .face { --h: 228; flex: none; }
+.owner-foot > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.owner-foot small { color: var(--mute); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.owner-foot b { font-family: var(--head); overflow-wrap: anywhere; }

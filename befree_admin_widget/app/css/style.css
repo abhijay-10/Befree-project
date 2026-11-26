@@ -562,7 +562,9 @@ button { cursor: pointer; }
 .nc-conv.is-bad { color: var(--red); }
 .nc-arrow { color: var(--muted); }
 .nc-drop { color: var(--red); font-size: 10px; font-weight: 600; white-space: nowrap; }
-.nc-summary { margin: 14px 0 0; font-size: 13px; font-weight: 500; text-align: center; }
+.nc-summary { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; text-align: left; }
+.nc-summary:empty { display: none; }
+.ov-table td.ov-empty { text-align: center; padding-left: 16px; padding-right: 16px; }
 
 .nc-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 .nc-subhead { display: flex; align-items: center; justify-content: space-between; min-height: 36px; margin-bottom: 8px; }
@@ -645,15 +647,14 @@ button { cursor: pointer; }
 @media (max-width: 760px) { .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---------- Revenue forecast ---------- */
-.fc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
-.fc-stat { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #f5f7fb; min-width: 0; }
+.fc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.fc-stat { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--fc, #C9C3FB); border-radius: 10px; background: #fff; min-width: 0; }
 .fc-stat span { color: var(--muted); font-size: 12px; }
 .fc-stat strong { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fc-stat small { color: var(--muted); font-size: 11.5px; }
-.fc-stat.is-won { background: #e9f7f0; } .fc-stat.is-won strong { color: #0d7a4f; }
-.fc-stat.is-forecast { background: #eeecff; } .fc-stat.is-forecast strong { color: #4334d6; }
-.fc-stat.is-best { background: #f5f3ff; }
-.fc-stat.is-trend { background: #fff4e3; } .fc-stat.is-trend strong { color: #b4610a; }
+.fc-stat small { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-stat.is-won { --fc: #16A06B; } .fc-stat.is-won strong { color: #0d7a4f; }
+.fc-stat.is-forecast { --fc: #5B4CF0; } .fc-stat.is-forecast strong { color: #4334d6; }
+.fc-stat.is-best { --fc: #C9C3FB; }
 .fc-chart { position: relative; display: flex; height: 230px; padding-top: 4px; }
 .fc-col { display: flex; flex: 1; flex-direction: column; align-items: center; min-width: 0; padding: 0 4px; }
 .fc-bars { position: relative; display: flex; flex: 1; width: 100%; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--border); }
@@ -666,13 +667,8 @@ button { cursor: pointer; }
 .fc-label { height: 22px; line-height: 14px; padding-top: 8px; color: var(--muted); font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .is-current .fc-label, .is-next .fc-label { color: #111827; font-weight: 600; }
 .is-next .fc-value { color: #4334d6; }
-.fc-legend { margin-top: 14px; justify-content: flex-start; }
-.fc-dot { position: absolute; left: 50%; z-index: 2; width: 9px; height: 9px; margin: 0 0 -4.5px -4.5px; border-radius: 50%; background: #fff; border: 2px solid #E8890C; }
-.fc-dot.is-next { width: 12px; height: 12px; margin: 0 0 -6px -6px; background: #E8890C; }
-.fc-line { position: absolute; left: 0; right: 0; top: 28px; bottom: 23px; width: 100%; height: calc(100% - 51px); z-index: 1; overflow: visible; pointer-events: none; }
-.fc-line polyline { fill: none; stroke: #E8890C; stroke-width: 2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .fc-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: #fff6e5; color: #7a4b00; font-size: 12.5px; }
-@media (max-width: 560px) { .fc-stats { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .fc-stats { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Sales by owner ---------- */
 .rp-owner { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 0; }
@@ -843,6 +839,7 @@ button { cursor: pointer; }
 /* ===================== Charts: legend at the top right, light dashed gridlines ===================== */
 .card-body:has(> .ov-legend, > .rp-legend, > .fc-legend) { display: flex; flex-direction: column; }
 .card-body > .ov-legend, .card-body > .rp-legend, .card-body > .fc-legend { order: -1; justify-content: flex-end; margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.fc-card .card-body > .fc-legend { order: 0; justify-content: center; margin: 14px 0 0; }
 .ov-chart-bars { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 0,
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 33%,
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='1'%3E%3Cpath d='M0 .5h4' stroke='%23E1E5EF'/%3E%3C/svg%3E") repeat-x 0 66%; }
