@@ -42,32 +42,31 @@
   const block = (title, body, cls) => `<section class="${cls || ''}"><h2>${icon(icons[title])}${title}</h2>${body}</section>`;
 
   // Each step is read from the record. Nothing is assumed.
+  // The stages are Lead_Status values, matched without spaces, hyphens or capitals. Junk is not a stage.
+  const STAGES = [['Not Contacted', 'Not Contacted'], ['Contacted', 'Contacted'], ['Pre-Qualified', 'Pre-Qualified'], ['Qualified', 'Qualified (Deal Created)']];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const statusOptions = () => ((V.editable || []).find(f => f.key === 'status') || {}).options || [];
+  const crmStatus = name => statusOptions().find(o => norm(o) === norm(name) || (name === 'Junk' && norm(o) === 'junklead'));
   function journey() {
-    const firstOf = (list, key) => list.map(x => x[key]).sort((a, b) => R.toDate(a) - R.toDate(b))[0];
-    const accepted = V.meetings.filter(m => m.outcome === 'Accepted'), last = R.latestMeeting(V);
-    const byInvite = !accepted.length && R.inviteAccepted(last) ? last.reply === 'accepted' ? 'Client accepted' : 'Invitation sent' + (last.invitedOn ? ' ' + date(last.invitedOn) : '') : null;
-    const raised = V.isLead ? V.deals.length > 0 : ['Opportunity', 'Customer'].includes(V.contact.lifecycle);
-    const steps = [
-      ['Lead created', true, V.created],
-      ['Owner assigned', !!V.account.owner, null, V.account.owner],
-      ['Meeting booked', V.meetings.length > 0, firstOf(V.meetings, 'start')],
-      ['Meeting accepted', R.meetingAccepted(V), firstOf(accepted, 'start'), byInvite],
-      ['Deal raised', raised]
-    ];
-    // No next step for a lead we may not or should not work.
-    const stopped = R.isOptedOut(V.contact) || /lost|junk|not qualified/i.test(V.contact.status || '');
-    const next = stopped ? -1 : steps.findIndex(s => !s[1]);
-    return '<ol class="journey" aria-label="Lead journey">' + steps.map(([label, done, when, note], i) => `<li class="${done ? 'done' : i === next ? 'next' : ''}"><span class="dot">${done ? icon('tick') : i + 1}</span><b>${label}</b><small>${done ? esc(note || (when ? date(when) : 'Done')) : i === next ? 'Next step' : 'Not yet'}</small></li>`).join('') + '</ol>';
+    const now = norm(V.contact.status), at = STAGES.findIndex(s => norm(s[0]) === now), junk = /^junk/.test(now);
+    const mayMove = R.can(V.user, 'edit') && !ui.busy;
+    const step = (label, cls, mark, note, value) => {
+      const tag = value && mayMove ? 'button' : 'span';
+      return `<li class="${cls}"><${tag} class="step"${tag === 'button' ? ` data-status="${esc(value)}" title="Set Lead Status to ${esc(value)}"` : ''}><span class="dot">${mark}</span><b>${label}</b><small>${note}</small></${tag}></li>`;
+    };
+    const items = [step('Lead created', 'done', icon('tick'), V.created ? date(V.created) : 'Done')].concat(STAGES.map(([name, label], i) => {
+      const done = i < at, current = i === at;
+      return step(label, done ? 'done' : current ? 'next' : '', done ? icon('tick') : i + 2, current ? 'Current' : done ? 'Done' : 'Not yet', current ? null : crmStatus(name));
+    }));
+    const junkValue = crmStatus('Junk');
+    const aside = junk ? '<span class="pill bad">Junk lead</span>' : mayMove && junkValue ? `<button class="quiet" data-status="${esc(junkValue)}">${icon('stop')}Mark as junk</button>` : '';
+    const unknown = now && at < 0 && !junk ? `<p class="mute">Lead Status in CRM: ${esc(V.contact.status)}</p>` : '';
+    return `<ol class="journey ${junk ? 'junked' : ''}" aria-label="Lead status">${items.join('')}</ol><div class="junk-row">${unknown}${aside}</div>`;
   }
   function scale(value) {
     return '<div class="scale" aria-hidden="true">' + ['Cold', 'Warm', 'Hot'].map(x => `<span class="${x.toLowerCase()} ${x === value ? 'on' : ''}"><i></i>${x}</span>`).join('') + '</div>';
   }
-  function faces() {
-    const since = V.touches.filter(t => { const d = R.daysBetween(t.date, V.now); return d >= 0 && d <= C.warmDays; });
-    const on = new Set(since.map(t => t.contactId));
-    const list = V.contacts.slice().sort((a, b) => on.has(b.id) - on.has(a.id)), show = list.slice(0, 7);
-    return '<ul class="faces">' + show.map(c => `<li class="${on.has(c.id) ? 'on' : ''}" title="${esc(c.name)}: ${on.has(c.id) ? 'engaged' : 'not engaged'}">${esc(initials(c.name))}</li>`).join('') + (list.length > 7 ? `<li>+${list.length - 7}</li>` : '') + '</ul>';
-  }
+  const sourceName = v => /^web\s*-?\s*(site\s*)?forms?$/i.test(String(v).trim()) ? 'Website' : v;
   const allLeads = () => db.live ? ui.list : db.list(ui.user);
 
   // Only the services of this lead
@@ -96,7 +95,7 @@
     const mayEdit = V.editable && V.editable.length && R.can(V.user, 'edit');
     const head = `<div class="svc-head"><h2>${icon('card')}Lead details</h2>${mayEdit && !ui.edit ? '<button data-do="edit">Edit</button>' : ''}</div>`;
     if (mayEdit && ui.edit) return `<section>${head}${editForm()}</section>`;
-    return `<section>${head}` + serviceForm() + (filled.length ? '<dl class="details">' + filled.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('') + '</dl>' : '<p class="mute">No details recorded.</p>') + '</section>';
+    return `<section>${head}` + serviceForm() + (filled.length ? '<dl class="details">' + filled.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(k === 'Lead source' ? sourceName(v) : v)}</dd></div>`).join('') + '</dl>' : '<p class="mute">No details recorded.</p>') + '</section>';
   }
   function editForm() {
     const d = ui.draft || {};
@@ -104,7 +103,7 @@
     const field = f => {
       const v = val(f), req = f.required ? 'required' : '';
       const input = f.type === 'select'
-        ? `<select name="${f.key}" ${req}><option value="">Not set</option>${[...new Set(f.options.concat(v ? [v] : []))].map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`
+        ? `<select name="${f.key}" ${req}><option value="">Not set</option>${[...new Set(f.options.concat(v ? [v] : []))].map(x => `<option value="${esc(x)}" ${x === v ? 'selected' : ''}>${esc(f.key === 'source' ? sourceName(x) : x)}</option>`).join('')}</select>`
         : `<input name="${f.key}" type="${f.type}" value="${esc(v)}" ${f.type === 'number' ? 'min="0" step="any"' : 'maxlength="255"'} ${req}>`;
       return `<label>${esc(f.label)}${input}</label>`;
     };
@@ -151,10 +150,12 @@
 
   function header() {
     const c = V.contact, a = V.account, seg = R.segment(a.staff);
+    const facts = [['Country', a.country || 'Not set'], ['Segment', seg.label], ['Owner', a.owner || 'Unassigned']]
+      .concat(V.service && V.service.field ? [['Service', (c.services || []).join(', ') || 'Not chosen']] : [])
+      .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
     return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(c.name))}</div><div class="who"><h1>${esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
-      <p>${c.title ? esc(c.title) + ', ' : ''}${!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)}</p></div>
-      <dl><div><dt>Country</dt><dd>${esc(a.country || 'Not set')}</dd></div><div><dt>Segment</dt><dd>${pill(seg.label)}</dd></div>
-      <div><dt>Owner</dt><dd>${esc(a.owner || 'Unassigned')}</dd></div>${V.service && V.service.field ? `<div><dt>Service</dt><dd>${esc((c.services || []).join(', ') || 'Not chosen')}</dd></div>` : ''}<div><dt>${c.status !== undefined && !c.lifecycle ? 'Lead status' : 'Lifecycle'}</dt><dd>${esc(c.lifecycle || c.status || 'Not set')}</dd></div></dl></header>`;
+      <p>${c.title ? esc(c.title) + ', ' : ''}${!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)}</p></div></header>
+      <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
   }
   function temperatureBlock(t) {
     if (missing('touches') && V.isLead) return savedHeatBlock();
@@ -211,12 +212,6 @@
     if (item) Object.assign(item, { temperature: V.heat, status: V.contact.status, optedOut: V.contact.optedOut });
     ui.heats = R.countTemperatures(list);
     drawHeat();
-  }
-  function engagementBlock() {
-    if (missing('touches')) return block('Account engagement', faces() + '<p class="mute">Waiting for engagement data</p>', 'waiting');
-    if (V.problems.touches || V.problems.contacts) return block('Account engagement', problem('touches') || problem('contacts'));
-    const e = R.engagement(V);
-    return block('Account engagement', `<p class="big">${e.engaged} of ${e.total}</p>${faces()}<p>contacts engaged in the last ${C.warmDays} days</p>`);
   }
   function taskBlock(t) {
     const open = V.tasks.filter(k => k.open).sort((x, y) => R.toDate(x.due || '9999-01-01') - R.toDate(y.due || '9999-01-01'))[0];
@@ -305,7 +300,7 @@
     const points = (list, cls, mark, none) => list.length ? `<ul class="ai-list ${cls}">` + list.map(x => `<li>${icon(mark)}<span>${esc(x)}</span></li>`).join('') + '</ul>' : `<p class="mute">${none}</p>`;
     card((a.old ? `<p class="note warm-note">This lead ${a.old === 'changed' ? 'has changed since' : 'was reloaded after'} the summary was made. Refresh to include any changes.</p>` : '') +
       `<div class="ai-result"><span class="verdict ${s.verdict}">${s.label}</span><span class="mute">Evidence: ${s.evidence}</span></div><p class="ai-text">${esc(s.summary)}</p>${s.changed ? `<p class="setup">${esc(s.changed)}</p>` : ''}` +
-      `<div class="ai-cols"><div><h3>Lead data</h3><dl class="details">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>` +
+      `<div class="ai-cols"><div><h3>Lead data</h3><dl class="details">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(k === 'Lead source' ? sourceName(v) : v)}</dd></div>`).join('')}</dl></div>` +
       `<div><h3>Points to a deal</h3>${points(s.good, 'good-list', 'tick', 'No clear signs yet.')}</div>` +
       `<div><h3>Against, or not known</h3>${points(s.bad, 'bad-list', 'alert', 'No concerns found.')}</div></div>` +
       (s.next ? `<div class="ai-next"><b>Suggested next step</b>${esc(s.next)}</div>` : '') + `<p class="ai-foot">Written by AI from CRM data. Check it before you act on it.${a.saved ? ` Saved in ${a.saved === 'crm' ? 'CRM' : 'this browser only'}.` : ''}</p>`);
@@ -318,8 +313,8 @@
     const names = (entity, list) => list.slice(0, 3).map(x => link(entity, x.id, x.name) + (x.by ? ` (${x.by})` : '')).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
     const line = (cls, title, text) => `<p class="note ${cls}">${icon('alert')}<span><b>${title}</b> ${text}</span></p>`;
     const out = [];
-    if (d.contacts.length) out.push(line('bad', 'Email already exists.', `${esc(d.email)} is already used by ${d.contacts.length === 1 ? 'the contact' : 'the contacts'} ${names(C.modules.contact, d.contacts)}.`));
-    if (d.leads.length) out.push(line('bad', 'Email already exists.', `${esc(d.email)} is also on ${d.leads.length === 1 ? 'the lead' : d.leads.length + ' other leads:'} ${names('Leads', d.leads)}.`));
+    const same = [d.contacts.length ? names(C.modules.contact, d.contacts) : '', d.leads.length ? names('Leads', d.leads) : ''].filter(Boolean);
+    if (same.length) out.push(line('warm-note', 'Possible duplicate.', `Same email as ${same.join(', ')}.`));
     if (d.accounts.length) out.push(line('warm-note', 'Company already exists.', `Account: ${names(C.modules.account, d.accounts)}. Use Convert to Deal to add this lead to it.`));
     if (d.failed.length) out.push(`<p class="hint dup-off">Duplicates could not be checked in: ${esc(d.failed.join(', '))}.</p>`);
     box.innerHTML = out.join('');
@@ -482,7 +477,7 @@
     rail();
     const t = R.temperature(V);
     $('#app').innerHTML = '<div class="hero' + (ui.shown === ui.id ? '' : ' enter') + '">' + header() + journey() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
-      '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats"><div id="heat">' + temperatureBlock(t) + '</div>' + engagementBlock() + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
+      '<div id="dup" role="alert"></div><div id="ai" aria-live="polite"></div><div class="stats"><div id="heat">' + temperatureBlock(t) + '</div>' + (R.can(V.user, 'task') ? taskBlock(t) : '') + meetingBlock() + '</div>' +
       '<div class="cols"><div class="stack"><div>' + tabBar() + (V.notes && ui.tab === 'notes' ? notesBlock() : V.notes && ui.tab === 'tasks' ? tasksBlock() : touchBlock()) + '</div>' + servicesBlock() + '</div><div class="stack">' + detailBlock() + dealBlock() + '</div></div>';
     ui.shown = ui.id;
     drawDup();
@@ -569,6 +564,14 @@
       rail();
       $('#app').classList.add('loading');
       return reload().catch(fail);
+    }
+    if (x.status) {
+      // "Qualified (Deal Created)" is true only after conversion, with the same rule as the Convert to Deal button
+      if (norm(x.status) === 'qualified') {
+        if (!R.can(V.user, 'raise')) return say('You cannot convert leads.', true);
+        return R.meetingAccepted(V) ? openConvert() : say('Convert to Deal unlocks after the meeting invitation is sent or accepted.', true);
+      }
+      return run(() => db.saveFields(V, { status: x.status }), 'Lead status saved: ' + x.status + '.');
     }
     if (x.tab) { keep(); ui.tab = x.tab; return render(); }
     if (x.close) return run(() => db.closeTask(V, x.close), 'Task completed.');

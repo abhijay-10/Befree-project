@@ -689,7 +689,7 @@ window.Data = (function () {
   const CHANNEL_ALIASES = {
     "webinar": "Webinars", "event": "Events", "trade show": "Events", "conference": "Events",
     "linkedin": "LinkedIn Organic", "linkedin ad": "LinkedIn Ads", "google adwords": "Google Ads", "adwords": "Google Ads",
-    "web site": "Website", "web download": "Website", "facebook": "Social Media", "twitter": "Social Media"
+    "web site": "Website", "web form": "Website", "webform": "Website", "web download": "Website", "facebook": "Social Media", "twitter": "Social Media"
   };
   const MQL_STATUSES = ["mql", "marketing qualified", "sql", "sales qualified"]; // TODO: Lead_Status values
   const SQL_STATUSES = ["sql", "sales qualified"];
@@ -733,7 +733,15 @@ window.Data = (function () {
   function channelName(v) {
     const key = String(v || "").trim().toLowerCase();
     if (!key) return null;
+    // Any web form spelling ("Web Form", "Web-form", "Website Form") is the Website channel
+    if (/^web\s*-?\s*(site\s*)?forms?$/.test(key)) return "Website";
     return CHANNELS.find(function (c) { return c.toLowerCase() === key; }) || CHANNEL_ALIASES[key] || null;
+  }
+  // A record from the website enquiry form, even when its Lead Source is empty or another value
+  const WEB_ENQUIRY = /services?\s+requested\s*(?:\(\d+\))?\s*:/i;
+  const fromWebForm = function (r) { return WEB_ENQUIRY.test(String((r && r.Description) || "")); };
+  function sourceOf(r) {
+    return channelName(r.Lead_Source) || (fromWebForm(r) ? "Website" : null);
   }
   function countryCode(v) {
     const key = String(v || "").trim().toLowerCase();
@@ -827,6 +835,7 @@ window.Data = (function () {
       owner: text(r.Owner),
       bde: text(r.BDE),
       leadSource: r.Lead_Source,
+      webForm: fromWebForm(r),
       close: r.Closing_Date || "",
       created: toDate(r.Created_Time),
       lastActivityDate: day(r.Last_Activity_Time || r.Modified_Time || r.Created_Time),
@@ -942,10 +951,14 @@ window.Data = (function () {
    * Tags each deal once with its source channel ("Other / not set" when none matches) and the channels
    * its contact engaged with in the 180 days before the deal was created. Every card reads these tags.
    */
-  function tagChannels(deals, campaigns, touches) {
+  function tagChannels(deals, campaigns, touches, leads) {
     const campaignType = new Map((campaigns || []).map(function (c) { return [c.id, c[FIELDS.campaign.type]]; }));
+    // A deal with no source of its own takes the source of the lead it was converted from
+    const leadSource = new Map();
+    (leads || []).forEach(function (l) { if (l.detail && l.detail.deal) leadSource.set(l.detail.deal, sourceOf(l)); });
     deals.forEach(function (d) {
-      d.source = channelName(d.leadSource) || channelName(campaignType.get(d.campaignId)) || OTHER_CHANNEL;
+      d.source = channelName(d.leadSource) || (d.webForm ? "Website" : null) || leadSource.get(d.id) ||
+        channelName(campaignType.get(d.campaignId)) || OTHER_CHANNEL;
       d.channels = Array.from(new Set((touches.get(d.contactId) || []).filter(function (t) {
         const age = (d.created - t.date) / 864e5;
         return d.created && age >= 0 && age <= INFLUENCE_DAYS;
@@ -1027,7 +1040,7 @@ window.Data = (function () {
         const first = rows.firstTouch.get(r.id);
         return {
           owner: text(r.Owner) || "Unassigned",
-          source: channelName(r[Ld.source]),
+          source: sourceOf(r),
           month: toDate(r[Ld.created]),
           responseMinutes: first ? Math.max(0, (first - toDate(r[Ld.created])) / 60000) : null
         };
@@ -1067,7 +1080,7 @@ window.Data = (function () {
     const status = function (list) {
       return function (r) { return list.indexOf(String(r[FIELDS.lead.status] || "").toLowerCase()) !== -1; };
     };
-    const fromWeb = function (r) { return channelName(r[FIELDS.lead.source]) === "Website"; };
+    const fromWeb = function (r) { return sourceOf(r) === "Website"; };
     const sourcedDeals = deals.filter(function (d) { return d.created && (!since || d.created >= since) && d.source !== OTHER_CHANNEL; });
 
     function windowMetrics(from, to) {
@@ -1360,7 +1373,7 @@ window.Data = (function () {
     };
     setCountries(rows, dealRows);
     rows.touches = await buildTouches(rows.campaigns, rows.contacts, rows.deals);
-    tagChannels(rows.deals, rows.campaigns, rows.touches);
+    tagChannels(rows.deals, rows.campaigns, rows.touches, rows.leads);
     return rows;
   }
 
@@ -1437,7 +1450,7 @@ window.Data = (function () {
     _test: {
       toDeal: toDeal, setCountries: setCountries, liveRaw: liveRaw, build: build, countryRow: countryRow,
       stageBucket: stageBucket, dealGroup: dealGroup, splitAmount: splitAmount, serviceParts: serviceParts,
-      serviceTotals: serviceTotals, summary: summary, localDay: localDay, OTHER_COUNTRY: OTHER_COUNTRY,
+      serviceTotals: serviceTotals, summary: summary, localDay: localDay, OTHER_COUNTRY: OTHER_COUNTRY, sourceOf: sourceOf,
       pickDeals: pickDeals, periodStart: periodStart, tagChannels: tagChannels, optionBlock: optionBlock
     }
   };

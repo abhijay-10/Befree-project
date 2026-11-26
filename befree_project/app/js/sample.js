@@ -42,6 +42,7 @@
     { id: 'd2', accountId: 'a1', name: 'Northgate: Service line B', stage: 'Qualified', raisedBy: 'Sam' }
   ];
   const notes = [{ id: 'n1', contactId: 'c6', title: 'First call', text: 'Interested in bookkeeping support before year end.', at: ago(1, 11), by: 'Brad' }];
+  const statuses = ['Not Contacted', 'Contacted', 'Pre-Qualified', 'Qualified', 'Junk Lead'];
   const sources = ['Web form', 'Target account', 'Event', 'Referral'];
   const find = id => contacts.find(c => c.id === id);
 
@@ -55,6 +56,7 @@
       return {
         live: false, notes: notes.filter(n => n.contactId === id).slice().reverse(),
         editable: [
+          { key: 'status', label: 'Lead Status', type: 'select', options: statuses, value: contact.status },
           { key: 'title', label: 'Title', type: 'text', value: contact.title },
           { key: 'email', label: 'Email', type: 'email', value: contact.email },
           { key: 'phone', label: 'Phone', type: 'text', value: contact.phone },

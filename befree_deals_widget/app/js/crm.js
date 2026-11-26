@@ -18,6 +18,23 @@
     if (failed(r)) throw new Error(why(r));
     return [];
   }
+  // Deals have no Country field: it comes from the account, then the contact, then the description (as in the Admin widget)
+  const COUNTRIES = { US: ['us', 'usa', 'unitedstates', 'unitedstatesofamerica', 'america'], UK: ['uk', 'gb', 'unitedkingdom', 'greatbritain', 'england', 'scotland', 'wales', 'northernireland'], AU: ['au', 'aus', 'australia'] };
+  const countryCode = v => { const k = String(v || '').toLowerCase().replace(/[^a-z]/g, ''); return Object.keys(COUNTRIES).find(c => COUNTRIES[c].includes(k)) || ''; };
+  async function countriesOf(entity, fields) {
+    const out = new Map();
+    try {
+      for (let page = 1; page <= 10; page++) {
+        const r = await ZOHO.CRM.API.getAllRecords({ Entity: entity, per_page: 200, page });
+        ((r && r.data) || []).forEach(x => { const code = fields.map(f => countryCode(x[f])).find(Boolean); if (code) out.set(x.id, code); });
+        if (!r || !r.info || !r.info.more_records) break;
+      }
+    } catch (e) { /* the other sources are still used */ }
+    return out;
+  }
+  const written = text => (/country\s*:\s*([A-Za-z. ]+?)\s*(?=[\r\n,;|]|services|phone|email|message|$)/i.exec(text || '') || [])[1];
+  // Website form records count as Website: a web form Lead Source, or the enquiry text in Description
+  const webSource = (source, description) => /^web\s*-?\s*(site\s*)?forms?$/i.test(String(source || '').trim()) || (/services?\s+requested\s*(?:\(\d+\))?\s*:/i.test(description || '') && !/^(email|webinars?|events?|linkedin|google|social)/i.test(source || '')) ? 'Website' : source || '';
   async function saved(call) {
     const r = await call;
     const x = r && r.data && r.data[0];
@@ -111,6 +128,7 @@
       const [m, user, r] = await Promise.all([meta(), me(), one('Deals', dealId)]);
       const accountId = id(r[D.account]), createdById = id(r[D.createdBy]), ownerId = id(r[D.owner]);
       if (!R.canSee(user, { createdById, ownerId })) throw new Error('A BDE can open only the deals they raised or own.');
+      const [notes, tasks, files] = await Promise.all([safe('notes', related(dealId, 'Notes')), safe('tasks', related(dealId, 'Tasks')), safe('files', related(dealId, 'Attachments'))]);
       const [account, roles, history, seen] = await Promise.all([
         accountId ? safe('account', one('Accounts', accountId)) : null,
         safe('roles', related(dealId, 'Contact_Roles')),
@@ -120,6 +138,9 @@
       const stage = r[D.stage] || '', befree = R.befreeStage(stage);
       const prob = r[D.probability] === null || r[D.probability] === undefined ? (befree ? befree.prob : null) : Number(r[D.probability]);
       return {
+        notes: (notes || []).map(n => ({ title: n.Note_Title || '', text: n.Note_Content || '' })),
+        tasks: (tasks || []).map(t => ({ id: t.id, subject: t.Subject, due: t.Due_Date, open: t.Status !== 'Completed' })),
+        files: (files || []).map(a => ({ name: a.File_Name, size: Number(a.Size) || 0 })),
         live: true, now: new Date(), user, problems, notFound: m.notFound, service: m.service, metaWhy: m.why,
         stages: m.stages.length ? m.stages : C.stages.map(s => s.name), stagesKnown: m.stages.length > 0, reasons: m.reasons,
         missing: { sourcedBy: !X.sourcedBy, approval: !X.approval, acceptance: !X.acceptance, touches: !hasTouches },
@@ -129,7 +150,7 @@
           stage, prob, amount: r[D.amount], expected: r[D.expected], symbol: typeof r.$currency_symbol === 'string' ? r.$currency_symbol : '',
           created: r.Created_Time, modified: r.Modified_Time, closeDate: r[D.closeDate] || null, timeline: r[C.timeline] || null, nextStep: r[D.nextStep] || '',
           nextStepUpdated: X.nextStepUpdated ? r[X.nextStepUpdated] : null, services: many(r[D.service]), serviceAmounts: Object.fromEntries(Object.entries(C.serviceAmounts).map(([s, f]) => [s, r[f]])), lostReason: r[D.lostReason] || '',
-          type: r[D.type], leadSource: r[D.leadSource], campaign: name(r[D.campaign]), description: r[D.description],
+          type: r[D.type], leadSource: webSource(r[D.leadSource], r[D.description]), campaign: name(r[D.campaign]), description: r[D.description],
           sourcedBy: X.sourcedBy ? r[X.sourcedBy] || '' : '', approval: X.approval ? r[X.approval] || '' : '', acceptance: X.acceptance ? r[X.acceptance] || '' : '', rejectReason: X.rejectReason ? r[X.rejectReason] || '' : '',
           roles: await readRoles(roles),
           history: await readHistory(history, m.stageIds),
@@ -147,8 +168,11 @@
         if (!r || !r.info || !r.info.more_records) break;
         if (page === 10) all.partial = true;
       }
+      const [accounts, contacts] = await Promise.all([countriesOf('Accounts', ['Billing_Country', 'Country']), countriesOf('Contacts', ['Mailing_Country', 'Country'])]);
+      const countryOf = r => countryCode(r.Country) || accounts.get(id(r[D.account])) || contacts.get(id(r[D.contact])) || countryCode(written(r[D.description]));
       const list = all.filter(r => R.canSee(user, { createdById: id(r[D.createdBy]), ownerId: id(r[D.owner]) })).map(r => ({
         id: r.id, name: r[D.name] || 'No name', sub: [name(r[D.account]), r[D.stage]].filter(Boolean).join(', '), services: m.service.field ? many(r[D.service]) : [],
+        country: countryOf(r), source: webSource(r[D.leadSource], r[D.description]),
         amount: r[D.amount], symbol: typeof r.$currency_symbol === 'string' ? r.$currency_symbol : ''
       }));
       list.partial = !!all.partial;
@@ -159,6 +183,10 @@
       await saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Evidence: ' + to, Content: evidence }));
       await update(v, { [D.stage]: to });
     },
+    addNote: (v, text) => saved(ZOHO.CRM.API.addNotes({ Entity: 'Deals', RecordID: v.deal.id, Title: 'Note', Content: text })),
+    addTask: (v, subject, due) => saved(ZOHO.CRM.API.insertRecord({ Entity: 'Tasks', APIData: { Subject: subject, Due_Date: due, What_Id: v.deal.id, $se_module: 'Deals', Status: 'Not Started' }, Trigger: ['workflow'] })),
+    closeTask: (v, taskId) => saved(ZOHO.CRM.API.updateRecord({ Entity: 'Tasks', APIData: { id: taskId, Status: 'Completed' }, Trigger: ['workflow'] })),
+    attach: (v, file) => saved(ZOHO.CRM.API.attachFile({ Entity: 'Deals', RecordID: v.deal.id, File: { Name: file.name, Content: file } })),
     lose: (v, stage, reason) => update(v, { [D.stage]: stage, [D.lostReason]: reason }),
     // "to" is the stage the next step moves the deal to, if any
     async nextStep(v, text, to) {

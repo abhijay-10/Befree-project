@@ -124,7 +124,7 @@
     const box = el("p", "mk-explainer");
     box.append(
       el("strong", "", "Sourced"), ": the channel that created the deal. Only confirmed (Closed-won) deals count, by closing date. " +
-      "A deal whose source matches no channel is shown as Other / not set, so the channels add up to the confirmed total. ",
+      "A deal whose source matches no channel is not listed; its amount is stated under the total. ",
       el("strong", "", "Influenced"), ": a contact engaged in the 180 days before the deal was created."
     );
     card.body.append(box, el("p", "mk-note", "A deal can be sourced by one channel and influenced by several. Influenced is counted once per deal in its total."));

@@ -5,7 +5,7 @@ window.Store = (function () {
   const COUNTRIES = { ALL: "All countries", US: "United States", UK: "United Kingdom", AU: "Australia", Other: "Country not set" };
   const RANGES = ["7d", "30d", "90d", "12m", "all"];
 
-  const state = { country: "US", range: "30d" };
+  const state = { country: "ALL", range: "30d" };
 
   function emit() {
     window.dispatchEvent(new CustomEvent("filters:changed", { detail: Object.assign({}, state) }));

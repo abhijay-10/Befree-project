@@ -41,7 +41,7 @@
     const lost = R.isLost(d.stage) ? ' ' + pill(d.stage, 'bad') : R.isWon(d.stage) ? ' ' + pill(d.stage, 'good') : '';
     return `<header class="ticket"><div class="who"><h1>${esc(d.name)}${lost}</h1>
       <p>${d.accountName ? link('Accounts', d.accountId, d.accountName) : 'No account'}<span class="sep"></span>${d.contactName ? link('Contacts', d.contactId, d.contactName) : 'No contact'}</p></div>
-      <dl class="stub"><div><dt>Amount</dt><dd>${money(R.amounts(d).total)}</dd></div></dl><dl class="strip"><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
+      <dl class="strip"><div><dt>Owner</dt><dd>${esc(d.owner || 'Unassigned')}</dd></div>
       <div><dt>Service</dt><dd>${esc(d.services.join(', ') || 'Not chosen')}</dd></div><div><dt>Probability</dt><dd>${d.prob === null ? 'Not set' : d.prob + '%'}</dd></div></dl></header>`;
   }
   function stageBar() {
@@ -183,16 +183,22 @@
     if (!d.roles) return block('Contact roles', 'card', `<p class="mute">Contact roles are not available. ${esc(V.problems.roles || '')}</p>`);
     return block('Contact roles', 'card', d.roles.length ? '<ul class="people">' + d.roles.map(p => `<li><span class="face" aria-hidden="true">${esc(initials(p.name))}</span><span><b>${esc(p.name)}</b><small>${esc(p.role || (p.unread ? 'Role ID ' + p.unread : 'No role'))}</small></span></li>`).join('') + '</ul>' : '<p class="mute">No contact roles on this deal.</p>');
   }
-  function influenceBlock() {
-    const d = V.deal, x = R.influence(d);
-    let h = `<p class="mute">Sourced by</p><p><b>${missing('sourcedBy') ? 'Not set up yet' : esc(d.sourcedBy || 'Not set')}</b></p>`;
-    if (missing('touches')) h += '<p class="foot">Marketing influence needs the Touches module.</p>';
-    else if (!x) h += `<p class="foot">Touches could not be read. ${esc(V.problems.touches || '')}</p>`;
-    else {
-      h += `<p class="tags">${x.sourced ? pill('Sourced', 'good') : ''} ${x.influenced ? pill('Influenced', 'good') : pill('Not influenced')}</p>`;
-      h += x.list.length ? `<p>${x.list.length} ${x.list.length === 1 ? 'touch' : 'touches'} in the ${C.influencedDays} days before creation: ${esc(x.channels.join(', '))}</p>` : `<p class="mute">No touches in the ${C.influencedDays} days before creation.</p>`;
-    }
-    return block('Marketing influence', 'horn', h);
+
+  /* ---------- notes, tasks, files ---------- */
+  function recordsBlock() {
+    const edit = R.can(V.user, 'edit'), tab = ui.tab || 'notes', notes = V.notes || [], tasks = V.tasks || [], files = V.files || [];
+    const bar = '<div class="tabs" role="group" aria-label="Deal records">' + [['notes', 'Notes', notes.length], ['tasks', 'Tasks', tasks.filter(t => t.open).length], ['files', 'Files', files.length]]
+      .map(([k, n, c]) => `<button data-tab="${k}" aria-pressed="${tab === k}">${n} <span>${c}</span></button>`).join('') + '</div>';
+    const list = (items, none) => items.length ? '<ul class="records">' + items.join('') + '</ul>' : `<p class="mute">${none}</p>`;
+    let body;
+    if (V.problems[tab]) body = `<p class="note bad">Could not be read. ${esc(V.problems[tab])}</p>`;
+    else if (tab === 'notes') body = (edit ? '<form class="add" data-form="note"><textarea name="text" rows="2" maxlength="30000" placeholder="Write a note" aria-label="Note" required></textarea><button class="primary">Add note</button></form>' : '') +
+      list(notes.map(n => `<li><span><b>${esc(n.title || 'Note')}</b><small>${esc(n.text)}</small></span></li>`), 'No notes yet.');
+    else if (tab === 'tasks') body = (edit ? '<form class="add" data-form="task"><input name="subject" maxlength="200" placeholder="Task" aria-label="Task" required><input type="date" name="due" aria-label="Due date" required><button class="primary">Add task</button></form>' : '') +
+      list(tasks.map(t => `<li><span><b>${esc(t.subject)}</b><small>${t.due ? 'Due ' + date(t.due) : 'No due date'}</small></span>${!t.open ? pill('Done', 'good') : edit ? `<button data-done="${esc(t.id)}">Complete</button>` : ''}</li>`), 'No tasks yet.');
+    else body = (edit ? '<form class="add" data-form="file"><input type="file" name="file" aria-label="Choose a file" required><button class="primary">Upload</button></form>' : '') +
+      list(files.map(f => `<li><span><b>${esc(f.name)}</b><small>${Math.max(1, Math.ceil(f.size / 1024))} KB</small></span></li>`), 'No files attached.');
+    return `<section class="records-card">${bar}${body}</section>`;
   }
 
   /* ---------- page ---------- */
@@ -204,16 +210,25 @@
     rail();
     $('#app').innerHTML = `<div class="hero ${ui.shown === ui.id ? '' : 'enter'}">` + header() + stageBar() + actions() + '</div>' + (ui.msg ? `<p class="note ${ui.bad ? 'bad' : 'good'}" role="status">${esc(ui.msg)}</p>` : '') +
       '<div class="stats">' + amountBlock() + closeBlock() + approvalBlock() + '</div>' +
-      '<div class="cols"><div class="stack">' + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + influenceBlock() + '</div></div>';
+      '<div class="cols"><div class="stack">' + recordsBlock() + gateBlock() + historyBlock() + servicesBlock() + '</div><div class="stack">' + detailBlock() + peopleBlock() + '</div></div>';
     ui.shown = ui.id;
   }
   function rail() {
     const list = allDeals();
     if (!list || (db.live && !ui.rail)) return;
     $('#rail').hidden = false;
-    if (!$('#find')) $('#rail').innerHTML = '<div class="rail-top"><p>Deals <span id="count"></span></p><input id="find" type="search" placeholder="Search deal or account" aria-label="Search deal or account"></div><div id="items"></div>';
+    if (!$('#find')) $('#rail').innerHTML = '<div class="rail-top"><p>Deals <span id="count"></span></p><input id="find" type="search" placeholder="Search deal or account" aria-label="Search deal or account"><div class="filters"><select data-filter="country" aria-label="Country"></select><select data-filter="source" aria-label="Lead source"></select><select data-filter="service" aria-label="Service"></select></div></div><div id="items"></div>';
     const q = $('#find').value.trim().toLowerCase();
-    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q)), view = shown.slice(0, 200);
+    const pick = ui.filters || (ui.filters = { country: '', source: '', service: '' });
+    const valuesOf = (c, k) => k === 'service' ? c.services || [] : c[k] ? [c[k]] : [];
+    document.querySelectorAll('[data-filter]').forEach(box => {
+      const k = box.dataset.filter, all = { country: 'All countries', source: 'All lead sources', service: 'All services' }[k];
+      const found = [...new Set(list.flatMap(c => valuesOf(c, k)))].sort();
+      if (!found.includes(pick[k])) pick[k] = '';
+      if (box.dataset.key !== found.join()) { box.dataset.key = found.join(); box.innerHTML = `<option value="">${all}</option>` + found.map(x => `<option>${esc(x)}</option>`).join(''); }
+      box.value = pick[k];
+    });
+    const shown = list.filter(c => (c.name + ' ' + c.sub).toLowerCase().includes(q) && Object.keys(pick).every(k => !pick[k] || valuesOf(c, k).includes(pick[k]))), view = shown.slice(0, 200);
     const key = view.map(c => c.id + c.sub).join();
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
     if ($('#items').dataset.key !== key) {
@@ -256,6 +271,7 @@
   function fail(e) { ui.busy = false; $('#app').classList.remove('loading'); $('#app').innerHTML = `<p class="note bad">Could not load the deal. ${esc(e && (e.message || e.code) || 'Unknown error')}</p>`; }
 
   document.addEventListener('change', e => {
+    if (e.target.dataset.filter) { ui.filters[e.target.dataset.filter] = e.target.value; return rail(); }
     if (e.target.name === 'pick') {
       $('#nextText').hidden = e.target.value !== 'other';
       if (e.target.value === 'other') $('#nextText input').focus();
@@ -280,6 +296,8 @@
       $('#app').classList.add('loading');
       return reload().catch(fail);
     }
+    if (x.tab) { ui.tab = x.tab; return render(); }
+    if (x.done) return run(() => db.closeTask(V, x.done), 'Task completed.');
     if (x.record) return db.open(x.entity, x.record);
     if (x.show) { ui.form = x.show; return say(null); }
     if (x.do === 'move') return startMove();
@@ -293,6 +311,14 @@
   document.addEventListener('submit', e => {
     e.preventDefault();
     const data = new FormData(e.target), f = Object.fromEntries(data), kind = e.target.dataset.form, d = V.deal;
+    if (kind === 'note') { const text = f.text.trim(); return text ? run(() => db.addNote(V, text), 'Note added.') : say('Write a note first.', true); }
+    if (kind === 'task') { const subject = f.subject.trim(); return subject ? run(() => db.addTask(V, subject, f.due), 'Task added.') : say('Enter the task.', true); }
+    if (kind === 'file') {
+      const file = data.get('file');
+      if (!file || !file.size) return say('Choose a file that is not empty.', true);
+      if (file.size > 20 * 1024 * 1024) return say('The file is larger than 20 MB.', true);
+      return run(() => db.attach(V, file), 'File uploaded: ' + file.name + '.');
+    }
     if (kind === 'service') {
       if (R.servicesLocked(d)) return;
       const chosen = data.getAll('service').filter(Boolean);

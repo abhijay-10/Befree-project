@@ -282,3 +282,32 @@ button.ai { border-color: #b9c6f7; background: var(--tint); color: var(--accent-
   .svc-row .svc-bar { grid-column: 1 / -1; grid-row: 2; }
 }
 @media (prefers-reduced-motion: reduce) { .hero.enter, .ai-wait i { animation: none; } button, #app { transition: none; } }
+
+/* Spacing, white header and gentle motion */
+:root { --bg: #f5f7fb; --shadow: 0 1px 2px rgba(20,29,46,.04), 0 8px 24px rgba(20,29,46,.05); --radius: 16px; }
+.shell { gap: 24px; padding: 24px; }
+section { padding: 22px; }
+.stats, .cols, .stack { gap: 20px; }
+.stats { margin-top: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: stretch; }
+#heat > section, .stats > section { display: flex; flex-direction: column; min-height: 180px; animation: rise .3s ease-out backwards; transition: transform .18s; }
+.stats > section:nth-of-type(1) { animation-delay: .06s; }
+.stats > section:nth-of-type(2) { animation-delay: .12s; }
+#heat > section:hover, .stats > section:hover { transform: translateY(-2px); }
+.band { padding: 26px 28px; background: #fff; color: var(--ink); border-bottom: 1px solid var(--line); }
+.avatar { background: var(--tint); color: var(--accent-dark); box-shadow: none; }
+.who p { color: var(--mute); }
+.who button.link { color: var(--accent); }
+.band :focus-visible { outline-color: var(--accent); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0; padding: 18px 28px; border-bottom: 1px solid var(--line); }
+.facts > div { min-width: 0; padding: 10px 14px; border-radius: 10px; background: #f6f8fc; }
+.facts dt { font-size: 12px; }
+.facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.journey { border-bottom: 0; padding-bottom: 8px; }
+.journey .step { display: block; width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; text-align: center; }
+.journey button.step:hover:not(:disabled) { background: none; }
+.journey button.step:hover .dot { border-color: var(--accent); transform: scale(1.08); }
+.dot { transition: transform .18s; }
+.journey.junked { opacity: .5; }
+.junk-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; padding: 0 28px 14px; border-bottom: 1px solid var(--line); }
+@media (max-width: 720px) { .journey .step { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; text-align: left; } }
+@media (prefers-reduced-motion: reduce) { #heat > section, .stats > section { animation: none; transition: none; } #heat > section:hover, .stats > section:hover, .journey button.step:hover .dot { transform: none; } }

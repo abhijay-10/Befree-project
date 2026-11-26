@@ -277,7 +277,7 @@ window.App = (function () {
     const rows = data.attribution;
     const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.sourced; })));
     const fragment = document.createDocumentFragment();
-    rows.forEach(function (r) {
+    rows.filter(function (r) { return r.channel !== "Other / not set"; }).forEach(function (r) {
       const row = el("div", "rp-attr-row");
       const bars = el("div", "rp-attr-bars");
       bars.setAttribute("role", "img");
@@ -297,6 +297,8 @@ window.App = (function () {
     sumRow.dataset.total = total;
     sumRow.append(el("span", "rp-attr-label", "Total"), el("div", "rp-attr-bars"), el("span", "rp-attr-value", formatINR(total)));
     fragment.appendChild(sumRow);
+    const unmatched = rows.filter(function (r) { return r.channel === "Other / not set"; }).reduce(function (t, r) { return t + r.sourced; }, 0);
+    if (unmatched) fragment.appendChild(el("p", "ov-muted", "The total includes " + formatINR(unmatched) + " with no matching channel, which is not listed."));
     fragment.appendChild(legend([{ label: "Confirmed amount, by source channel", color: "var(--blue)" }],
       "rp-legend" + (legendClass ? " " + legendClass : "")));
     return fragment;

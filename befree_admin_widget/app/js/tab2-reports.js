@@ -80,8 +80,11 @@
       header.replaceChildren(heading, App.optionSwitch(o, function (next) { choice[key] = next; draw(); }));
       card.dataset.option = o;
       card.dataset.total = block.amount;
-      const rows = rowsOf(block).filter(function (r) { return r.value > 0; });
-      card.dataset.rowsTotal = rows.reduce(function (t, r) { return t + r.value; }, 0);
+      const all = rowsOf(block).filter(function (r) { return r.value > 0; });
+      const rows = all.filter(function (r) { return !r.hidden; });
+      // Rows that are not shown still belong to the total, and are stated below the bars
+      const left = all.filter(function (r) { return r.hidden; }).reduce(function (t, r) { return t + r.value; }, 0);
+      card.dataset.rowsTotal = all.reduce(function (t, r) { return t + r.value; }, 0);
       const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.value; })));
       card.body.replaceChildren();
       if (o === "wonOpen") card.body.appendChild(App.splitLine(data.options.won.amount, data.options.open.amount));
@@ -89,6 +92,7 @@
         card.body.appendChild(App.horizontalBarRow(r.label, r.text, r.value / max * 100, color));
       });
       if (!rows.length) card.body.appendChild(emptyNote(o === "won" ? "No won deals in this period." : "No won or open deals."));
+      if (left) card.body.appendChild(el("p", "ov-muted", "Not shown: " + App.formatINR(left) + (key === "country" ? " with no US, UK or AU country." : " with no listed service.")));
     }
     draw();
     return card;
@@ -100,7 +104,8 @@
       const percents = Data.shares(block.byCountry.map(function (c) { return c.value; }));
       return block.byCountry.map(function (c, i) {
         return {
-          label: c.label === Data.OTHER_COUNTRY ? "Country not set" : c.label,
+          label: c.label,
+          hidden: c.label === Data.OTHER_COUNTRY,
           value: c.value,
           text: App.formatINR(c.value) + (state.country === "ALL" ? " · " + App.formatPct(percents[i]) : "")
         };
@@ -111,7 +116,7 @@
   function renderByService(data, state) {
     return switchCard("service", "Amount by service", data, state, function (block) {
       return block.services.map(function (s) {
-        return { label: s.label, value: s.value, text: App.formatINR(s.value) };
+        return { label: s.label, value: s.value, text: App.formatINR(s.value), hidden: s.key === "other" };
       }).sort(function (a, b) { return b.value - a.value; });
     }, "var(--blue)");
   }

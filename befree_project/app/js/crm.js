@@ -84,6 +84,8 @@
     }).filter(Boolean);
   }
 
+  // Website form records count as Website: a web form Lead Source, or the enquiry text in Description (same rule as the Admin widget)
+  const webSource = (source, description) => /^web\s*-?\s*(site\s*)?forms?$/i.test(String(source || '').trim()) || (/services?\s+requested\s*(?:\(\d+\))?\s*:/i.test(description || '') && !/^(email|webinars?|events?|linkedin|google|social)/i.test(source || '')) ? 'Website' : source || '';
   // The lead among the participants of a meeting
   const guestOf = (meeting, leadId, email) => (meeting.Participants || []).find(p => String(id(p.participant)) === String(leadId) ||
     (email && String(p.Email || p.participant || '').toLowerCase() === String(email).toLowerCase())) || null;
@@ -130,7 +132,7 @@
       editable: editable(service.fields, c),
       notes: notes.map(n => ({ id: n.id, title: n.Note_Title || '', text: n.Note_Content || '', at: n.Created_Time || n.Modified_Time, by: name(n.Created_By) || name(n.Owner) })).sort((a, b) => new Date(b.at) - new Date(a.at)),
       details: [
-        ['Email', c[L.email]], ['Phone', c[L.phone]], ['Mobile', c[L.mobile]], ['Lead source', c[L.source]], ['Industry', c[L.industry]],
+        ['Email', c[L.email]], ['Phone', c[L.phone]], ['Mobile', c[L.mobile]], ['Lead source', webSource(c[L.source], c.Description)], ['Industry', c[L.industry]],
         ['Rating', c[L.rating]], ['Employees', c[L.staff]], ['City', c[L.city]], ['Website', c[L.website]]
       ],
       missing: { touches: !hasTouches, outcome: !L.outcome, reschedules: !L.reschedules || !L.backToColdOn || !L.outcome },

@@ -42,16 +42,21 @@
 
   root.BefreeSample = {
     live: false,
-    list: u => visible(u).map(d => ({ id: d.id, name: d.name, sub: d.accountName + ', ' + d.stage, services: d.services, amount: d.amount })),
+    list: u => visible(u).map(d => ({ id: d.id, name: d.name, sub: d.accountName + ', ' + d.stage, services: d.services, amount: d.amount, country: d.country, source: d.leadSource === 'Web form' ? 'Website' : d.leadSource })),
     async load(id, u) {
       const d = find(id);
       return {
         live: false, now: new Date(), user: u, problems: {}, missing: {}, notFound: [],
         service: { field: 'Services_List', label: 'Services List', multi: true, editable: true, options: C.sampleServices },
         stages: order, reasons: C.sampleLostReasons, stagesKnown: true,
+        notes: (d.notes || []).slice(), tasks: (d.tasks || []).map(t => ({ ...t })), files: (d.files || []).slice(),
         deal: { ...d, timeline: d.closeDate, expected: Math.round(d.amount * d.prob / 100), history: d.history.slice() }
       };
     },
+    async addNote(v, text) { const d = find(v.deal.id); (d.notes || (d.notes = [])).unshift({ title: '', text }); },
+    async addTask(v, subject, due) { const d = find(v.deal.id); (d.tasks || (d.tasks = [])).push({ id: 'k' + Date.now(), subject, due, open: true }); },
+    async closeTask(v, id) { find(v.deal.id).tasks.find(t => t.id === id).open = false; },
+    async attach(v, file) { const d = find(v.deal.id); (d.files || (d.files = [])).push({ name: file.name, size: file.size }); },
     async move(v, to) { const d = find(v.deal.id); d.stage = to; d.prob = R.befreeStage(to).prob; addHistory(d, v); },
     async lose(v, stage, reason) { const d = find(v.deal.id); d.stage = stage; d.prob = 0; d.lostReason = reason; addHistory(d, v); },
     async nextStep(v, text, to) { const d = find(v.deal.id); d.nextStep = text; d.nextStepUpdated = new Date(); if (to) await this.move(v, to); },

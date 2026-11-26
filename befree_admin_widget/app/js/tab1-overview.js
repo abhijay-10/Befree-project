@@ -104,7 +104,7 @@
       { key: "confirmed", icon: "wallet", tone: "blue", value: App.formatINR(k.confirmedAmount), label: "Confirmed amount",
         sub: plural(k.confirmedCount, "Closed-won deal") + ", closing date in " + App.periodText(state.range) },
       { key: "unconfirmed", icon: "target", tone: "green", value: App.formatINR(k.unconfirmedAmount), label: "Unconfirmed amount",
-        sub: "Open deals at 10% to 90%", note: "Estimate: " + App.formatINR(k.weighted) + " weighted (amount × stage %)" },
+        sub: "Open deals at 10% to 90%" },
       { key: "unconfirmedDeals", icon: "handshake", tone: "blue", value: App.formatCount(k.unconfirmedCount), label: "Unconfirmed deals", sub: "Open deals at 10% to 90%" },
       { key: "winRate", icon: "percent", tone: "orange", value: App.formatPct(k.winRate), label: "Win rate", sub: "Won ÷ closed, last 6 months" },
       { key: "newAccounts", icon: "building", tone: "blue", value: App.formatCount(k.newAccounts), label: "New accounts", sub: "Created in this period" },
@@ -220,14 +220,14 @@
     const thead = el("thead");
     thead.appendChild(head);
     const tbody = el("tbody");
-    (data.countries || []).forEach(function (c) {
+    const unplaced = (data.countries || []).find(function (c) { return c.code === "Other"; });
+    (data.countries || []).filter(function (c) { return c.code !== "Other"; }).forEach(function (c) {
       const tr = el("tr", c.code === state.country ? "is-current" : "");
       [c.code, App.formatCount(c.created), App.formatCount(c.open), App.formatCount(c.moved), App.formatCount(c.confirmedDeals),
        App.formatINR(c.confirmedAmount), App.formatCount(c.won), App.formatCount(c.lost), App.formatPct(c.winRate)].forEach(function (v, i) {
         const td = el("td", i ? "" : "ov-deal-name", i ? v : names[v] || v);
         tr.appendChild(td);
       });
-      if (c.code === "Other") tr.title = "No US, UK or AU country was found on these records. They are part of All countries.";
       tr.tabIndex = 0;
       const pick = function () { Store.setCountry(c.code); };
       tr.addEventListener("click", pick);
@@ -245,6 +245,10 @@
     const scroller = el("div", "ov-table-wrap");
     scroller.appendChild(table);
     card.body.appendChild(scroller);
+    if (unplaced) {
+      card.body.appendChild(el("p", "ov-muted", "All countries also includes records with no US, UK or AU country: " + App.formatCount(unplaced.created) +
+        " leads created, " + plural(unplaced.confirmedDeals, "confirmed deal") + " worth " + App.formatINR(unplaced.confirmedAmount) + "."));
+    }
     return card;
   }
 
@@ -278,7 +282,7 @@
       card.body.appendChild(line);
     });
     card.body.appendChild(el("p", "ov-stage-total", "Total: " + plural(data.kpis.unconfirmedCount, "deal") + " · " +
-      App.formatINR(data.kpis.unconfirmedAmount) + " · estimate " + App.formatINR(data.kpis.weighted) + " weighted"));
+      App.formatINR(data.kpis.unconfirmedAmount)));
     return card;
   }
 
@@ -326,7 +330,11 @@
     body.append(grid, side);
     card.append(header, body);
 
-    const mode = function () { return ui.serviceMode === "value" ? "value" : "deals"; };
+    // "Value" is the amount; "Deals" is the number of deals that include the service.
+    const mode = function () { return ui.serviceMode === "value" ? "value" : "dealCount"; };
+    const named = function (list) { return list.filter(function (s) { return s.key !== "other"; }); };
+    const none = data.services.find(function (s) { return s.key === "other"; });
+    const services = named(data.services);
     const byCountry = function () { return state.country === "ALL" && ui.serviceView === "country"; };
     const colorOf = function (s) { return ui.services.size && !ui.services.has(s.key) ? GREY : s.color; };
     // In "Deals" a deal with n services counts 1/n to each, so the shares add up to the number of deals.
@@ -349,7 +357,7 @@
     }
 
     function drawTiles(percents) {
-      grid.replaceChildren.apply(grid, data.services.map(function (s, i) {
+      grid.replaceChildren.apply(grid, services.map(function (s, i) {
         const tile = button("sv-tile" + (s[mode()] ? "" : " is-zero"));
         tile.setAttribute("aria-pressed", String(ui.services.has(s.key)));
         const box = el("span", "sv-icon");
@@ -359,7 +367,7 @@
         const figures = el("span", "sv-figures");
         const pct = el("span", "sv-pct");
         pct.append(dot, App.formatPct(percents[i]));
-        figures.append(pct, el("span", "sv-value", App.formatINR(s.value)));
+        figures.append(pct, el("span", "sv-value", mode() === "value" ? App.formatINR(s.value) : plural(s.dealCount, "deal")));
         tile.append(box, el("span", "sv-label", s.label), figures);
         tile.addEventListener("click", function () {
           if (ui.services.has(s.key)) ui.services.delete(s.key);
@@ -389,13 +397,13 @@
 
     function drawDonut(percents) {
       const parts = chartBox("sv-donut");
-      parts.canvas.setAttribute("aria-label", data.services.map(function (s, i) { return tooltipText(s, percents[i]); })
+      parts.canvas.setAttribute("aria-label", services.map(function (s, i) { return tooltipText(s, percents[i]); })
         .filter(function (_, i) { return percents[i] > 0; }).join("; "));
-      const total = data.services.reduce(function (t, s) { return t + s[mode()]; }, 0);
+      const total = services.reduce(function (t, s) { return t + s[mode()]; }, 0);
       const center = el("div", "sv-center");
       center.append(
-        el("strong", "", mode() === "value" ? App.formatINR(total) : App.formatCount(data.kpis.confirmedCount)),
-        el("span", "", mode() === "value" ? "confirmed amount" : "confirmed deals")
+        el("strong", "", mode() === "value" ? App.formatINR(total) : App.formatCount(total)),
+        el("span", "", mode() === "value" ? "confirmed amount" : "service selections")
       );
       parts.box.appendChild(center);
       side.appendChild(parts.box);
@@ -403,10 +411,10 @@
       chart = new Chart(parts.canvas, {
         type: "doughnut",
         data: {
-          labels: data.services.map(function (s) { return s.label; }),
+          labels: services.map(function (s) { return s.label; }),
           datasets: [{
-            data: data.services.map(function (s) { return s[mode()]; }),
-            backgroundColor: data.services.map(colorOf),
+            data: services.map(function (s) { return s[mode()]; }),
+            backgroundColor: services.map(colorOf),
             borderColor: "#fff",
             borderWidth: 2,
             hoverOffset: 0
@@ -421,7 +429,7 @@
               displayColors: false,
               callbacks: {
                 title: function () { return ""; },
-                label: function (item) { return tooltipText(data.services[item.dataIndex], percents[item.dataIndex]); }
+                label: function (item) { return tooltipText(services[item.dataIndex], percents[item.dataIndex]); }
               }
             }
           }
@@ -430,9 +438,9 @@
     }
 
     function drawByCountry() {
-      const countries = data.servicesByCountry;
+      const countries = data.servicesByCountry.filter(function (c) { return c.country !== "Other"; });
       const percents = countries.map(function (c) {
-        return Data.shares(c.services.map(function (s) { return s[mode()]; }));
+        return Data.shares(named(c.services).map(function (s) { return s[mode()]; }));
       });
       const totals = countries.map(function (c) {
         return mode() === "value" ? App.formatINR(c.total) : plural(c.count, "deal");
@@ -446,7 +454,7 @@
         type: "bar",
         data: {
           labels: countries.map(function (c) { return c.country; }),
-          datasets: data.services.map(function (s, j) {
+          datasets: services.map(function (s, j) {
             return { label: s.label, data: countries.map(function (_, i) { return percents[i][j] || 0; }),
                      backgroundColor: colorOf(s), barThickness: 28 };
           })
@@ -461,7 +469,7 @@
               callbacks: {
                 title: function (items) { return items[0].label; },
                 label: function (item) {
-                  return tooltipText(countries[item.dataIndex].services[item.datasetIndex], percents[item.dataIndex][item.datasetIndex]);
+                  return tooltipText(named(countries[item.dataIndex].services)[item.datasetIndex], percents[item.dataIndex][item.datasetIndex]);
                 }
               }
             }
@@ -479,16 +487,17 @@
 
     function draw() {
       destroyChart();
-      const percents = Data.shares(data.services.map(function (s) { return s[mode()]; }));
+      const percents = Data.shares(services.map(function (s) { return s[mode()]; }));
       drawControls();
       drawTiles(percents);
       side.replaceChildren();
-      const total = data.services.reduce(function (t, s) { return t + s[mode()]; }, 0);
+      const total = services.reduce(function (t, s) { return t + s[mode()]; }, 0);
       if (!total) side.appendChild(el("p", "ov-muted", "No confirmed deals in this period."));
       else if (byCountry()) drawByCountry();
       else drawDonut(percents);
       if (!window.Chart) side.appendChild(el("p", "ov-muted", "The chart library could not be loaded."));
-      side.appendChild(el("p", "sv-insight", insightLine(data, state, data.services, percents)));
+      side.appendChild(el("p", "sv-insight", insightLine(data, state, services, percents)));
+      if (none && none[mode()]) side.appendChild(el("p", "ov-muted", "Not shown: " + plural(none.dealCount, "confirmed deal") + " with no listed service, " + App.formatINR(none.value) + "."));
     }
 
     card.draw = draw;

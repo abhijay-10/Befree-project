@@ -204,7 +204,7 @@ window.Cards = (function () {
 
     if (state.country === "ALL") {
       const list = el("div", "nc-countries");
-      f.byCountry.forEach(function (c) {
+      f.byCountry.filter(function (c) { return Data.CODES.indexOf(c.country) !== -1; }).forEach(function (c) {
         const other = Data.CODES.indexOf(c.country) === -1; // "Country not set" has no filter of its own
         const row = button("nc-country");
         row.title = other ? "Deals with no US, UK or AU country" : "Show " + c.country + " only";
@@ -564,10 +564,14 @@ window.Cards = (function () {
   }
 
   function channelTrend(data, state) {
-    const t = data.channelTrend;
+    // "Other / not set" is not drawn
+    const full = data.channelTrend;
+    const keep = full.channels.map(function (name) { return name !== "Other / not set"; });
+    const only = function (list) { return list.filter(function (_, i) { return keep[i]; }); };
+    const t = { channels: only(full.channels), labels: full.labels, sourced: only(full.sourced), influenced: only(full.influenced) };
     const s = shell("trend", "Channel trend over time", "Monthly confirmed amount by channel, by closing date · " + countryLabel(state),
       "Confirmed (Closed-won) deals only. Channel share = the channel's value ÷ the total of all channels in that month. " +
-      "Sourced: each deal counts once, under its source or \"Other / not set\". " +
+      "Sourced: each deal counts once, under its source. Deals with no matching channel are not drawn. " +
       "Influenced: a deal counts under every channel its contact engaged with, so these are never added together.");
     s.card.draw = function () {};
     const empty = !t.sourced.concat(t.influenced).some(function (row) { return row.some(function (v) { return v > 0; }); });
