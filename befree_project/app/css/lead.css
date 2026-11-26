@@ -475,3 +475,56 @@ h1 { color: var(--ink); }
 .facts { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); align-items: stretch; }
 .facts dd { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
 @media (min-width: 760px) { .facts .wide { grid-column: span 2; } }
+
+/* ---------- A little deeper colour, and the Inter font ---------- */
+:root { --ink: #121731; --mute: #4b5374; }
+body { font-family: "Inter", "Segoe UI", system-ui, sans-serif; font-size: 14px; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+body {
+  background:
+    radial-gradient(900px 520px at -5% -10%, #d9d4ff 0, transparent 60%),
+    radial-gradient(800px 480px at 105% -5%, #ffd3e8 0, transparent 55%),
+    radial-gradient(700px 500px at 50% 110%, #cfeeff 0, transparent 60%), #f1f1fa;
+  background-attachment: fixed;
+}
+.band, .band + .facts { background: linear-gradient(120deg, #dfe2ff 0%, #e9dcff 55%, #fbdcec 112%); }
+.band + .facts > div { background: rgba(255, 255, 255, .8); border-color: rgba(91, 76, 240, .18); }
+.rail-top { background: linear-gradient(180deg, #e8e4ff, #fff); }
+h1 { font-weight: 800; letter-spacing: -.025em; }
+h2 { font-weight: 650; letter-spacing: -.01em; }
+.facts dd, .txt b { font-weight: 650; }
+.journey b { font-weight: 650; }
+.actions button { font-weight: 550; }
+
+/* ---------- More space ---------- */
+.shell { gap: 28px; padding: 28px; }
+#rail { flex-basis: 330px; }
+.stats, .cols, .stack { gap: 24px; }
+.stats, .cols { margin-top: 28px; }
+section { padding: 26px; }
+h2 { margin-bottom: 18px; }
+.band { padding: 34px 34px 24px; }
+.band + .facts { gap: 14px; padding: 0 34px 30px; }
+.journey { padding: 32px 20px 16px; }
+.actions { gap: 12px; padding: 20px 34px 26px; }
+.hero .hint { margin-left: 34px; margin-right: 34px; }
+.panel { margin: 0 34px 24px; padding: 18px 20px; }
+.note { margin-top: 20px; }
+.rail-top { padding: 22px 18px 18px; }
+.filters { gap: 10px; margin-top: 12px; }
+#leads { padding: 12px; }
+#leads button + button { margin-top: 5px; }
+.details > div { padding: 10px 0; }
+.timeline li { padding-top: 11px; padding-bottom: 11px; }
+@media (max-width: 540px) {
+  .shell { gap: 18px; padding: 14px; }
+  section { padding: 20px; }
+  .band { padding: 24px 18px 18px; } .band + .facts { padding: 0 18px 20px; }
+  .actions { padding: 16px 18px 20px; } .hero .hint, .panel { margin-left: 18px; margin-right: 18px; }
+}
+
+/* ---------- Roomier header ---------- */
+.band { padding: 40px 44px 28px; gap: 18px 22px; }
+.band + .facts { gap: 16px; padding: 0 44px 36px; }
+.band + .facts > div { padding: 13px 16px 13px 22px; }
+.rail-top { padding: 24px 20px 20px; }
+@media (max-width: 540px) { .band { padding: 26px 20px 20px; } .band + .facts { padding: 0 20px 24px; } }

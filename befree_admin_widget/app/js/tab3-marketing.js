@@ -87,6 +87,7 @@
       card.dataset.check = "switch-" + field;
       card.dataset.option = o;
       card.dataset.total = value === null ? "" : value;
+      if (holder.firstChild) card.classList.add("no-anim"); // only the first drawing fades in
       holder.replaceChildren(card);
     }
     draw();

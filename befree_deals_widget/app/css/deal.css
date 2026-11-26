@@ -440,3 +440,61 @@ h1 .pill { background: var(--green-bg); }
 .strip dd { color: var(--ink); }
 .journey li.next { background: linear-gradient(120deg, color-mix(in srgb, var(--c) 85%, #fff), color-mix(in srgb, var(--c) 55%, #6366f1)); }
 .panel input[name=note] { width: min(100%, 560px); }
+
+/* ---------- A little deeper colour, and the Inter font ---------- */
+:root {
+  --ink: #0f1f26; --mute: #46616a;
+  --text: "Inter", "Segoe UI", system-ui, sans-serif; --num: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+body { font-size: 14px; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+body {
+  background:
+    radial-gradient(900px 520px at -5% -10%, #c6efe6 0, transparent 60%),
+    radial-gradient(800px 480px at 105% -5%, #d3dcff 0, transparent 55%),
+    radial-gradient(700px 500px at 50% 110%, #ffe6c4 0, transparent 60%), #eef4f6;
+  background-attachment: fixed;
+}
+.ticket { background: linear-gradient(120deg, #d3efe9 0%, #d5e9f6 55%, #dfe2ff 112%); }
+.rail-top { background: linear-gradient(180deg, #d2eee8, #f1f8fa); }
+.strip { background: rgba(255, 255, 255, .8); border-color: rgba(13, 148, 136, .2); }
+h1 { font-weight: 800; letter-spacing: -.025em; }
+h2 { font-weight: 650; letter-spacing: -.01em; }
+.big, .stats .big, .stub dd { font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.journey b { font-weight: 650; }
+
+/* ---------- More space ---------- */
+.main { padding: 28px; }
+.stats, .cols { margin-top: 28px; }
+.stats, .cols, .stack { gap: 24px; }
+section { padding: 0 26px 24px; }
+.stats section { padding: 24px 26px; }
+.records-card { padding-top: 22px; }
+h2 { margin-bottom: 16px; }
+.who { padding: 34px 34px 24px; }
+.strip { margin: 0 26px 26px; }
+.journey { margin: 24px 22px 22px; }
+.actions { margin: 0 22px 18px; padding: 6px; }
+.hero .hint { margin: 0 22px 14px; }
+.panel { margin: 0 22px 22px; padding: 22px 24px; }
+.note { margin-top: 20px; }
+.rail-top { padding: 24px 20px 20px; }
+.filters { gap: 10px; margin-top: 12px; }
+#items { padding: 12px; }
+#items button + button { margin-top: 6px; }
+.gate li { padding: 12px 0; }
+.details > div { padding: 10px 0; }
+.ledger td { padding-top: 10px; padding-bottom: 10px; }
+.records li { padding: 12px 0; }
+@media (max-width: 720px) {
+  .main { padding: 14px; }
+  section { padding: 0 18px 20px; } .stats section { padding: 20px; }
+  .who { padding: 24px 20px 18px; } .strip { margin: 0 14px 18px; }
+  .journey { margin: 18px 14px; } .actions, .hero .hint, .panel { margin-left: 14px; margin-right: 14px; }
+}
+
+/* ---------- Roomier header ---------- */
+.who { padding: 40px 44px 28px; }
+.strip { margin: 0 32px 32px; }
+.strip > div { padding: 14px 28px 15px; }
+.rail-top { padding: 26px 22px 22px; }
+@media (max-width: 720px) { .who { padding: 26px 20px 20px; } .strip { margin: 0 14px 20px; } }

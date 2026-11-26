@@ -108,7 +108,6 @@
       { key: "unconfirmedDeals", icon: "handshake", tone: "blue", value: App.formatCount(k.unconfirmedCount), label: "Unconfirmed deals", sub: "Open deals at 10% to 90%" },
       { key: "winRate", icon: "percent", tone: "orange", value: App.formatPct(k.winRate), label: "Win rate", sub: "Won ÷ closed, last 6 months" },
       { key: "newAccounts", icon: "building", tone: "blue", value: App.formatCount(k.newAccounts), label: "New accounts", sub: "Created in this period" },
-      { key: "influenced", icon: "megaphone", tone: "green", value: App.formatINR(k.influenced), label: "Marketing influenced", sub: "Confirmed deals, contact engaged within 180 days", check: "influenced" }
     ].forEach(function (item) {
       const card = el("article", "card ov-kpi");
       const delta = k.delta[item.key];
@@ -211,6 +210,89 @@
       box.append(el("p", "ov-muted", "Converted leads are included: CRM moves them out of the Leads list, but they were still created."), wrap);
       card.body.appendChild(box);
     }
+    return card;
+  }
+
+  /* ================= Revenue forecast ================= */
+
+  function renderForecast(data, state) {
+    const f = data.revenueForecast;
+    const span = f.days === 365 ? "12 months" : f.days + " days";
+    const card = App.card("Revenue forecast", "Next " + span + " from open deals, by Closing Date · " + countryLabel(state));
+    card.classList.add("fc-card");
+    const opts = f.days >= 365 ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" };
+    const dayText = function (d) { return new Date(d + "T00:00:00").toLocaleDateString("en-GB", opts); };
+    const short = function (from, to) { return dayText(from) + " – " + dayText(to); };
+    const stat = function (label, value, sub, cls) {
+      const box = el("div", "fc-stat" + (cls ? " " + cls : ""));
+      box.append(el("span", "", label), el("strong", "", value), el("small", "", sub));
+      return box;
+    };
+    const stats = el("div", "fc-stats");
+    stats.append(
+      stat("Won, last " + span, App.formatINR(f.past[5].amount), f.past[5].count + (f.past[5].count === 1 ? " deal" : " deals"), "is-won"),
+      stat("Pipeline forecast", App.formatINR(f.next.weighted), "Open deals closing in the next " + span + ", amount × stage %", "is-forecast"),
+      stat("Trend prediction", App.formatINR(f.trend.next), "Line through the last 6 periods" + (f.trend.slope > 0 ? ", rising" : f.trend.slope < 0 ? ", falling" : ""), "is-trend"),
+      stat("Best case", App.formatINR(f.next.best), f.next.count + (f.next.count === 1 ? " open deal closes" : " open deals close") + " in the next " + span, "is-best")
+    );
+    // Columns: the last 6 periods (won), then the next one (pipeline forecast and best case); a dashed trend line across all 7
+    const n = f.past.length + 1;
+    const max = Math.max.apply(null, [1, f.next.best, f.trend.next].concat(f.past.map(function (p) { return p.amount; }), f.trend.line));
+    const trend = f.trend.line.concat(f.trend.next);
+    const plot = el("div", "fc-chart");
+    plot.setAttribute("role", "img");
+    plot.setAttribute("aria-label", f.past.map(function (p) { return short(p.from, p.to) + ": won " + App.formatINR(p.amount); }).join("; ") +
+      "; next: pipeline forecast " + App.formatINR(f.next.weighted) + ", trend prediction " + App.formatINR(f.trend.next) + ", best case " + App.formatINR(f.next.best));
+    const dot = function (bars, value, i) {
+      const d = el("i", "fc-dot" + (i === n - 1 ? " is-next" : ""));
+      d.style.bottom = (value / max * 100) + "%";
+      d.title = "Trend " + App.formatINR(value);
+      bars.appendChild(d);
+    };
+    f.past.forEach(function (p, i) {
+      const col = el("div", "fc-col" + (i === f.past.length - 1 ? " is-current" : ""));
+      const bars = el("div", "fc-bars");
+      const bar = el("div", "fc-bar is-won");
+      bar.style.height = (p.amount / max * 100) + "%";
+      bar.title = short(p.from, p.to) + " · won " + App.formatINR(p.amount);
+      bars.appendChild(bar);
+      dot(bars, trend[i], i);
+      col.append(el("span", "fc-value", App.formatINR(p.amount)), bars, el("span", "fc-label", i === f.past.length - 1 ? "This period" : dayText(p.to)));
+      col.title = short(p.from, p.to);
+      plot.appendChild(col);
+    });
+    const col = el("div", "fc-col is-next");
+    const bars = el("div", "fc-bars");
+    const best = el("div", "fc-bar is-best");
+    best.style.height = (f.next.best / max * 100) + "%";
+    best.title = "Best case " + App.formatINR(f.next.best);
+    const weighted = el("div", "fc-bar is-forecast");
+    weighted.style.height = (f.next.best ? f.next.weighted / f.next.best * 100 : 0) + "%";
+    weighted.title = "Forecast " + App.formatINR(f.next.weighted);
+    best.appendChild(weighted);
+    bars.appendChild(best);
+    dot(bars, f.trend.next, n - 1);
+    col.append(el("span", "fc-value", App.formatINR(f.next.weighted)), bars, el("span", "fc-label", "Next " + span));
+    col.title = short(f.next.from, f.next.to);
+    plot.appendChild(col);
+    // The dashed trend line joins the dots (same box as the bars)
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "fc-line");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("aria-hidden", "true");
+    const line = document.createElementNS(NS, "polyline");
+    line.setAttribute("points", trend.map(function (v, i) { return ((i + 0.5) / n * 100) + "," + (100 - v / max * 100); }).join(" "));
+    svg.appendChild(line);
+    plot.appendChild(svg);
+    card.body.append(stats, plot, App.legend([{ label: "Won", color: "#16A06B" }, { label: "Pipeline forecast (amount × stage %)", color: "#5B4CF0" },
+      { label: "Best case (every deal closes)", color: "#C9C3FB" }, { label: "Trend line and prediction", color: "#E8890C" }], "rp-legend fc-legend"));
+    const notes = [];
+    if (f.overdue.count) notes.push(f.overdue.count + (f.overdue.count === 1 ? " open deal is" : " open deals are") + " past the Closing Date (" + App.formatINR(f.overdue.amount) + "), not in the forecast. Update their Closing Date.");
+    if (f.noDate) notes.push(f.noDate + (f.noDate === 1 ? " open deal has" : " open deals have") + " no Closing Date, not in the forecast.");
+    notes.forEach(function (n) { card.body.appendChild(el("p", "fc-note", n)); });
+    card.dataset.check = "forecast";
     return card;
   }
 
@@ -855,7 +937,7 @@
     const thirds = el("div", "ov-split ov-split-wide");
     thirds.append(renderWonLost(data, state), renderActivity(data, state));
     const risk = el("div", "nc-row");
-    risk.append(Cards.forecast(data, state), Cards.atRisk(data, state));
+    risk.append(renderForecast(data, state), Cards.atRisk(data, state));
     const leads = el("div", "ov-split ov-split-wide");
     leads.append(renderLeads(data, state), renderLeadStatus(data, state));
     root.replaceChildren(renderBanner(data, state), renderKpis(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,

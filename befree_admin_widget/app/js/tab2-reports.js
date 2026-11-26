@@ -2,14 +2,6 @@
 (function () {
   "use strict";
 
-  const TEMPERATURES = [
-    { name: "Hot", color: "var(--red)" },
-    { name: "Warm", color: "var(--orange)" },
-    { name: "Cold", color: "var(--grey-blue)" },
-    { name: "Not enough data", color: "#C9D2E3" },
-    { name: "Not checked yet", color: "#E6EAF2" }
-  ];
-
   const el = App.el;
   let root = null;
   let revenueChart = null;
@@ -124,66 +116,26 @@
     }, "var(--blue)");
   }
 
-  function donut(segments, total) {
-    const NS = "http://www.w3.org/2000/svg";
-    const R = 63, STROKE = 20, GAP = 5;
-    const circumference = 2 * Math.PI * R;
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("class", "rp-donut");
-    svg.setAttribute("viewBox", "0 0 150 150");
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", total + " open leads: " + segments.map(function (s) { return s.name + " " + s.count; }).join(", "));
-
-    const visible = segments.filter(function (s) { return s.count > 0; });
-    let start = 0;
-    visible.forEach(function (s) {
-      const share = s.count / total * circumference;
-      // Round caps add STROKE to the drawn length, so shorten the dash to leave a gap.
-      const inset = visible.length > 1 ? STROKE + GAP : 0;
-      const dash = Math.max(0.01, share - inset);
-      const arc = document.createElementNS(NS, "circle");
-      arc.setAttribute("cx", "75");
-      arc.setAttribute("cy", "75");
-      arc.setAttribute("r", String(R));
-      arc.setAttribute("transform", "rotate(-90 75 75)");
-      arc.style.fill = "none";
-      arc.style.stroke = s.color;
-      arc.style.strokeWidth = STROKE;
-      arc.style.strokeLinecap = visible.length > 1 ? "round" : "butt";
-      arc.style.strokeDasharray = dash + " " + (circumference - dash);
-      arc.style.strokeDashoffset = String(-(start + inset / 2));
-      svg.appendChild(arc);
-      start += share;
+  // Won (in the period) and open money per deal owner
+  function renderOwners(data, state) {
+    const card = reportCard("Sales by owner", "Won: closing date in " + App.periodText(state.range) + " · Open: deals open today · " + countryLabel(state), data.unavailable);
+    const rows = data.salesByOwner.slice(0, 8);
+    const max = Math.max.apply(null, [1].concat(rows.map(function (r) { return r.won + r.open; })));
+    rows.forEach(function (r) {
+      const row = el("div", "rp-owner");
+      const bar = el("div", "rp-owner-bar");
+      const won = el("span", "is-won"), open = el("span", "is-open");
+      won.style.width = (r.won / max * 100) + "%";
+      open.style.width = (r.open / max * 100) + "%";
+      bar.append(won, open);
+      bar.title = r.owner + ": won " + App.formatINR(r.won) + " (" + r.wonCount + "), open " + App.formatINR(r.open) + " (" + r.openCount + ")";
+      const text = el("span", "rp-owner-value");
+      text.append(el("b", "", App.formatINR(r.won)), " won · " + App.formatINR(r.open) + " open");
+      row.append(el("span", "rp-owner-name", r.owner), bar, text);
+      card.body.appendChild(row);
     });
-
-    const label = document.createElementNS(NS, "text");
-    label.setAttribute("x", "75");
-    label.setAttribute("y", "75");
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("dominant-baseline", "central");
-    label.setAttribute("class", "rp-donut-total");
-    label.textContent = total;
-    svg.appendChild(label);
-    return svg;
-  }
-
-  function renderTemperature(data, state) {
-    const card = reportCard("Lead temperature", "Open leads only, without converted, lost and junk leads · " + countryLabel(state), data.unavailable);
-    const segments = TEMPERATURES.map(function (t) {
-      return { name: t.name, color: t.color, count: data.temperature[t.name] || 0 };
-    });
-    const total = segments.reduce(function (n, s) { return n + s.count; }, 0);
-    if (!segments.some(function (s) { return s.count && s.name !== "Not checked yet"; })) {
-      card.body.appendChild(emptyNote(total ? (total === 1 ? "1 open lead, not checked yet. " : total + " open leads, not checked yet. ") + "Open a lead and click AI summary." : "No open leads."));
-      return card;
-    }
-    const box = el("div", "rp-temperature");
-    box.dataset.check = "temperature";
-    box.dataset.total = total;
-    box.append(donut(segments, total), App.legend(segments.filter(function (s, i) { return i < 3 || s.count; }).map(function (s) {
-      return { label: s.name + ": " + s.count, color: s.color };
-    }), "rp-legend"));
-    card.body.appendChild(box);
+    if (!rows.length) card.body.appendChild(emptyNote("No won or open deals."));
+    else card.body.appendChild(App.legend([{ label: "Won", color: "var(--green)" }, { label: "Open", color: "#F2B84B" }], "rp-legend"));
     return card;
   }
 
@@ -281,7 +233,7 @@
       renderWonLost(data, state),
       renderByCountry(data, state),
       renderByService(data, state),
-      renderTemperature(data, state),
+      renderOwners(data, state),
       revenue
     );
     root.replaceChildren(grid);

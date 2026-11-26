@@ -265,6 +265,60 @@ window.Data = (function () {
     };
   }
 
+  /*
+   * Revenue forecast for the period size chosen in the header (7, 30, 90 or 365 days; All time uses 30).
+   * Actual: won amount (Closing Date) in the current period and the 5 before it, the current one ending today.
+   * Trend: a least-squares line through those 6 amounts, carried on to predict the next period.
+   * Forecast: open deals whose Closing Date falls in the next period (today included), at their stage % (weighted)
+   * and in full (best case). Overdue: open deals whose Closing Date has passed.
+   */
+  function revenueForecast(deals, range) {
+    const days = RANGE_DAYS[range] || 30;
+    const start = periodStart(range in RANGE_DAYS && RANGE_DAYS[range] ? range : "30d");
+    const shift = function (from, n) { return new Date(from.getFullYear(), from.getMonth(), from.getDate() + n); };
+    const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), tomorrow = shift(today, 1);
+    const won = deals.filter(function (d) { return d.group === "confirmed" && d.closedOn; });
+    const open = deals.filter(function (d) { return d.group === "unconfirmed"; });
+    const past = [5, 4, 3, 2, 1, 0].map(function (k) {
+      const from = shift(start, -k * days), to = k ? shift(start, -(k - 1) * days) : tomorrow;
+      const list = won.filter(function (d) { return within(d.closedOn, from, to); });
+      return { from: localDay(from), to: localDay(shift(to, -1)), amount: sum(list, function (d) { return d.amount; }), count: list.length };
+    });
+    const end = shift(today, days);
+    const next = open.filter(function (d) { return d.close && within(d.close, today, end); });
+    const overdue = open.filter(function (d) { return d.close && within(d.close, null, today); });
+    const weighted = sum(next, function (d) { return d.bucket === null ? 0 : d.amount * d.bucket / 100; });
+    const current = past[5].amount;
+    // Trend: a straight line fitted to the won amounts of the 6 periods (least squares), carried on one period
+    const ys = past.map(function (p) { return p.amount; }), n = ys.length, mx = (n - 1) / 2;
+    const my = ys.reduce(function (t, y) { return t + y; }, 0) / n;
+    const sxx = ys.reduce(function (t, y, x) { return t + (x - mx) * (x - mx); }, 0);
+    const slope = ys.reduce(function (t, y, x) { return t + (x - mx) * (y - my); }, 0) / sxx;
+    const fit = function (x) { return Math.max(0, Math.round(my + slope * (x - mx))); };
+    return {
+      days: days, past: past,
+      trend: { line: ys.map(function (y, x) { return fit(x); }), next: fit(n), slope: slope },
+      next: { from: localDay(today), to: localDay(shift(end, -1)), weighted: weighted, best: sum(next, function (d) { return d.amount; }), count: next.length },
+      overdue: { amount: sum(overdue, function (d) { return d.amount; }), count: overdue.length },
+      noDate: open.filter(function (d) { return !d.close; }).length,
+      change: current ? (weighted / current - 1) * 100 : null
+    };
+  }
+
+  // Won (in the period) and open amounts per deal owner
+  function salesByOwner(deals, from) {
+    const map = new Map();
+    deals.forEach(function (d) {
+      const won = d.group === "confirmed" && d.closedOn && (!from || within(d.closedOn, from)), open = d.group === "unconfirmed";
+      if (!won && !open) return;
+      const name = d.owner || "No owner";
+      const row = map.get(name) || { owner: name, won: 0, open: 0, wonCount: 0, openCount: 0 };
+      if (won) { row.won += d.amount; row.wonCount++; } else { row.open += d.amount; row.openCount++; }
+      map.set(name, row);
+    });
+    return Array.from(map.values()).sort(function (a, b) { return (b.won + b.open) - (a.won + a.open); });
+  }
+
   // Figures of one option for the switch cards: total, per country, per service, sourced and influenced.
   function optionBlock(list, codes, influenceKnown) {
     const amount = function (l) { return sum(l, function (d) { return d.amount; }); };
@@ -642,6 +696,8 @@ window.Data = (function () {
         };
       }),
       marketingKpis: marketingKpis,
+      revenueForecast: revenueForecast(deals, state.range),
+      salesByOwner: salesByOwner(deals, from),
       mkt: (function () {
         const t = function (key, list) { return list.reduce(function (n, r) { return n + (r[key] || 0); }, 0); };
         const now = raws.map(function (r) { return r.mkt; }), prev = raws.every(function (r) { return r.mktBefore; }) ? raws.map(function (r) { return r.mktBefore; }) : null;
@@ -1394,7 +1450,12 @@ window.Data = (function () {
       "whose service amounts do not add up to Amount (split equally; the deal page shows their sum instead)");
 
     // Converted leads have left the Leads list, so they are read separately.
-    const isConverted = function (l) { return l.$converted === true || l.Converted__s === true || !!l.$converted_detail; };
+    const isConverted = function (l) {
+      if (typeof l.$converted === "boolean") return l.$converted; // CRM's own yes / no
+      if (typeof l.Converted__s === "boolean") return l.Converted__s;
+      const d = l.$converted_detail; // never-converted leads come with an empty one
+      return !!(d && (d.convert_date || d.deal || d.account || d.contact));
+    };
     const second = results[5];
     const convertedRows = second ? second.filter(isConverted) : [];
     // Rows that are not converted mean CRM ignored the request, so the number is unknown.

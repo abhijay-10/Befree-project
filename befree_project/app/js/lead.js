@@ -156,7 +156,7 @@
 
   function header() {
     const c = V.contact, a = V.account, seg = R.segment(a.staff);
-    const facts = [['Country', a.country || 'Not set'], ['Segment', seg.label], ['Owner', a.owner || 'Unassigned']]
+    const facts = [['Country', a.country || 'Not set'], ['Owner', a.owner || 'Unassigned']]
       .concat(V.service && V.service.field ? [['Service', (c.services || []).join(', ') || 'Not chosen']] : [])
       .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
     return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(c.name))}</div><div class="who"><h1>${esc(c.name)} ${R.isOptedOut(c) ? pill('Opted out', 'bad') : ''}</h1>
