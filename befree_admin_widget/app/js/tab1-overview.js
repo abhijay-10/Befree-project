@@ -944,14 +944,22 @@
     risk.append(renderForecast(data, state), Cards.atRisk(data, state));
     const leads = el("div", "ov-split ov-split-wide");
     leads.append(renderLeads(data, state), renderLeadStatus(data, state));
-    // The Revenue Forecast section is optional: if its files did not load or it fails, the rest of the Overview still shows
-    const forecastSection = [];
+    // If the Revenue Forecast cannot be shown, its place says why and the rest of the Overview still shows
+    let forecastSection;
     try {
-      if (window.RevenueForecastSection) forecastSection.push(window.RevenueForecastSection.render(data, state));
+      const missing = !window.RevenueForecastSection ? "js/revenue-forecast.js" : !window.RevenueForecastCalc ? "js/revenue-forecast-calc.js" : "";
+      if (missing) throw new Error(missing + " did not load. Upload the whole app folder to Zoho, then refresh with Ctrl + F5.");
+      forecastSection = window.RevenueForecastSection.render(data, state);
     } catch (err) {
       console.error("[widget] Revenue Forecast section could not be displayed", err);
+      forecastSection = el("article", "card rf-card");
+      const head = el("header", "card-header");
+      head.appendChild(el("h2", "card-title", "Revenue Forecast"));
+      const body = el("div", "card-body");
+      body.appendChild(el("p", "placeholder", "The Revenue Forecast could not be displayed. " + ((err && err.message) || "Unknown error")));
+      forecastSection.append(head, body);
     }
-    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), ...forecastSection, DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
+    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), forecastSection, DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
       renderTable(data, state));
     services.draw();
   }

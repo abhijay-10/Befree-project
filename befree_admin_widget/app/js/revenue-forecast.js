@@ -153,18 +153,22 @@ window.RevenueForecastSection = (function () {
       return card;
     }
     const thisMonth = c.future[0].from;
+    // A falling line that drops below ₹0 is shown as ₹0 (floored); the note says so, so ₹0 does not look like an error
+    const floored = t.ok && t.slope * 7 + t.intercept < 0;
+    const trendNote = !t.ok ? "Needs won revenue in at least 3 of the last 6 completed months"
+      : floored ? "Falling trend: the line drops below ₹0 by " + monthName(thisMonth) + ", so it shows ₹0. Historical estimate, not guaranteed"
+      : "Historical trend estimate for " + monthName(thisMonth) + ", not guaranteed";
     const stats = el("div", "rf-stats");
     stats.append(
       stat("won", "won", "Won revenue · last " + span(days), money(wonNow.amount), wonNow.count + (wonNow.count === 1 ? " deal won" : " deals won")),
       stat("forecast", "pipe", "Pipeline forecast", money(forecast.amount), "Open deals closing in the next " + span(days) + " · amount × stage %"),
-      stat("trend", "line", "Trend prediction", t.ok ? money(t.predicted) : "Not enough history",
-        t.ok ? "Historical trend estimate for " + monthName(thisMonth) + ", not guaranteed" : "Needs won revenue in at least 3 of the last 6 completed months"),
+      stat("trend", "line", "Trend prediction", t.ok ? money(t.predicted) : "Not enough history", trendNote),
       stat("best", "best", "Best case", money(best.amount), best.count + (best.count === 1 ? " eligible open deal" : " eligible open deals") + ", at full amount")
     );
     body.append(stats, chart(c), legend(t.ok));
     const notes = [];
     if (left.overdue) notes.push(left.overdue + (left.overdue === 1 ? " open deal is" : " open deals are") + " past the Closing Date and not in the forecast.");
-    if (left.noDate) notes.push(left.noDate + (left.noDate === 1 ? " open deal has" : " open deals have") + " no Closing Date and is not in the forecast.");
+    if (left.noDate) notes.push(left.noDate + (left.noDate === 1 ? " open deal has no Closing Date and is" : " open deals have no Closing Date and are") + " not in the forecast.");
     notes.forEach(function (n) { body.appendChild(el("p", "rf-note", n)); });
     card.querySelectorAll(".rf-value").forEach(countUp);
     return card;
