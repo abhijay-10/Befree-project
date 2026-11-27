@@ -8,6 +8,8 @@
 
   const $ = s => document.querySelector(s);
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  // Display only: every word starts with a capital, the rest is small ('tech monks' -> 'Tech Monks'). CRM keeps what was typed.
+  const nameCase = v => String(v == null ? '' : v).toLocaleLowerCase().replace(/(^|[\s\-\/(])(\p{L})/gu, (m, p, ch) => p + ch.toLocaleUpperCase());
   const date = d => R.toDate(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const time = d => date(d) + ', ' + R.toDate(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const pill = (text, cls) => `<span class="pill ${cls || ''}">${esc(text)}</span>`;
@@ -97,7 +99,7 @@
     return `<form class="svc-form" data-form="service"><p class="mute">${esc(s.label)}</p><div class="row">${field}<button>Save</button></div></form>`;
   }
   function detailBlock() {
-    const rows = V.details || [['Email', V.contact.email], ['Account', V.account.name], ['Employees', V.account.staff]];
+    const rows = V.details || [['Email', V.contact.email], ['Account', nameCase(V.account.name)], ['Employees', V.account.staff]];
     const filled = rows.filter(r => r[1] !== null && r[1] !== undefined && r[1] !== '');
     const mayEdit = V.editable && V.editable.length && R.can(V.user, 'edit');
     const head = `<div class="svc-head"><h2>${icon('card')}Lead details</h2>${mayEdit && !ui.edit ? '<button data-do="edit">Edit</button>' : ''}</div>`;
@@ -160,9 +162,9 @@
     const facts = [['Country', a.country || 'Not set']]
       .concat(V.service && V.service.field ? [['Service', (c.services || []).join(', ') || 'Not chosen']] : [])
       .concat([['Lead status', c.status || c.lifecycle || 'Not set']]);
-    const company = a.name && a.name !== 'No company' ? (!V.live || a.id ? link(C.modules.account, a.id, a.name) : esc(a.name)) : '';
-    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(company ? a.name : c.name))}</div><div class="who"><h1>${company || esc(c.name)} ${R.isOptedOut(c) ? pill('Email opted out', 'bad') : ''}</h1>
-      <p class="person">${company ? `<b>${esc(c.name)}</b>` : ''}${c.title ? (company ? '<span class="sep"></span>' : '') + esc(c.title) : ''}</p></div></header>
+    const company = a.name && a.name !== 'No company' ? (!V.live || a.id ? link(C.modules.account, a.id, nameCase(a.name)) : esc(nameCase(a.name))) : '';
+    return `<header class="band"><div class="avatar" aria-hidden="true">${esc(initials(company ? a.name : c.name))}</div><div class="who"><h1>${company || esc(nameCase(c.name))} ${R.isOptedOut(c) ? pill('Email opted out', 'bad') : ''}</h1>
+      <p class="person">${company ? `<b>${esc(nameCase(c.name))}</b>` : ''}${c.title ? (company ? '<span class="sep"></span>' : '') + esc(c.title) : ''}</p></div></header>
       <dl class="facts">${facts.map(([k, v]) => `<div${k === 'Service' ? ' class="wide"' : ''}><dt>${k}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join('')}</dl>`;
   }
   function temperatureBlock(t) {
@@ -292,16 +294,15 @@
     if (out) notes.push('Email opted out: no emails or email notifications. Call tasks and meeting booking are also blocked. The phone number and details stay saved in CRM.');
     if (R.can(V.user, 'raise') && !ok) notes.push(V.live && !V.isLead || !C.acceptOnInvite ? 'Convert to Deal unlocks after an Accepted meeting.' : !m || state === 'done' ? 'Convert to Deal unlocks after you book a meeting and send the invitation.' : m.reply === 'declined' ? 'The client declined the invitation. Book a later meeting and send its invitation to unlock Convert to Deal.' : 'Click Send email to send the meeting invitation. Convert to Deal then unlocks.');
     if (V.live && V.user.role === 'View only') notes.push(`The CRM profile "${esc(V.user.profile || 'unknown')}" is not matched to a Befree role in config.js.`);
-    if (V.service && V.service.notFound && V.service.notFound.length && V.user.role === 'Admin') notes.push('These API names in config.js are not in your Leads module: ' + esc(V.service.notFound.join(', ')) + '.');
     return `<div class="actions">${b.join('') || '<span class="mute">View only</span>'}</div>${notes.map(n => `<p class="hint">${n}</p>`).join('')}${form()}`;
   }
   // Email opt out: the last card on the page. Its confirmation opens inside the card, so it stays in view.
   function optOutBlock() {
     if (!R.can(V.user, 'optOut')) return '';
     const keep = 'Their phone number and details stay saved in CRM.';
-    if (R.isOptedOut(V.contact)) return block('Email opt out', `<p>${pill('Email opted out', 'bad')}</p><p class="mute">${esc(V.contact.name)} gets no emails or email notifications. ${keep}</p>`, 'optout-card');
+    if (R.isOptedOut(V.contact)) return block('Email opt out', `<p>${pill('Email opted out', 'bad')}</p><p class="mute">${esc(nameCase(V.contact.name))} gets no emails or email notifications. ${keep}</p>`, 'optout-card');
     const body = ui.form === 'optout'
-      ? `<p><b>Email opt out ${esc(V.contact.name)}?</b></p><p>They will get no more emails or email notifications. Call tasks and meeting booking will also be blocked. ${keep}</p><div class="row"><button class="primary" data-do="optout" ${ui.busy ? 'disabled' : ''}>Yes, opt out of email</button><button data-do="cancel">Cancel</button></div>`
+      ? `<p><b>Email opt out ${esc(nameCase(V.contact.name))}?</b></p><p>They will get no more emails or email notifications. Call tasks and meeting booking will also be blocked. ${keep}</p><div class="row"><button class="primary" data-do="optout" ${ui.busy ? 'disabled' : ''}>Yes, opt out of email</button><button data-do="cancel">Cancel</button></div>`
       : `<p class="mute">Use this when the customer does not want emails or email notifications. ${keep}</p><button class="quiet" data-show="optout" ${ui.busy ? 'disabled' : ''}>${icon('mailOff')}Email opt out</button>`;
     return block('Email opt out', body, 'optout-card');
   }
@@ -316,7 +317,7 @@
     if (a.state === 'loading') return card('<div class="ai-wait"><p class="mute" role="status">Reading this lead and writing the summary</p><i></i><i></i><i></i></div>');
     if (a.state === 'error') return card(`<p class="note bad" role="alert">${esc(a.error)}</p>`);
     const s = a.data, seg = R.segment(V.account.staff);
-    const facts = [['Company', V.account.name], ['Job title', V.contact.title], ['Country', V.account.country], ['Segment', seg.code ? seg.label : ''], ['Owner', V.account.owner], ['Service', (V.contact.services || []).join(', ')], [V.contact.lifecycle ? 'Lifecycle' : 'Status', V.contact.lifecycle || V.contact.status]]
+    const facts = [['Company', nameCase(V.account.name)], ['Job title', V.contact.title], ['Country', V.account.country], ['Segment', seg.code ? seg.label : ''], ['Owner', V.account.owner], ['Service', (V.contact.services || []).join(', ')], [V.contact.lifecycle ? 'Lifecycle' : 'Status', V.contact.lifecycle || V.contact.status]]
       .concat((V.details || []).filter(d => ['Lead source', 'Industry', 'Rating', 'Employees'].includes(d[0])))
       .filter(x => x[1] !== null && x[1] !== undefined && x[1] !== '');
     const points = (list, cls, mark, none) => list.length ? `<ul class="ai-list ${cls}">` + list.map(x => `<li>${icon(mark)}<span>${esc(x)}</span></li>`).join('') + '</ul>' : `<p class="mute">${none}</p>`;
@@ -417,7 +418,7 @@
     if (c.leadCount) notes.push(`${c.leadCount === 1 ? '1 other lead has' : c.leadCount + ' other leads have'} this email. Only this lead is converted.`);
     if (c.failed.length) notes.push('Duplicates could not be checked in: ' + esc(c.failed.join(', ')) + '. Check in CRM that this account and contact do not exist yet.');
     if (!c.roles) notes.push('Contact roles could not be read. Set the role on the deal in CRM.');
-    return `<form class="panel" data-form="convert" novalidate><p><b>Convert ${esc(V.contact.name)}</b></p>
+    return `<form class="panel" data-form="convert" novalidate><p><b>Convert ${esc(nameCase(V.contact.name))}</b></p>
       <div class="fields">${select('accountId', 'Account', c.accounts.map(a => ({ id: a.id, text: a.name + (a.by ? ' (' + a.by + ')' : '') })), 'Create new account')}
       ${select('contactId', 'Contact', named(c.contacts), 'Create new contact')}
       ${c.users ? select('ownerId', 'Owner of the new records', named(c.users), null) : ''}</div>
@@ -474,8 +475,8 @@
     Object.assign(ui, { busy: false, id: null, form: null, msg: null, conv: null, convDraft: null, dup: null, ai: null, edit: false, draft: null, noteDraft: null });
     const open = (entity, recordId, text) => v.live && recordId ? `<button data-entity="${esc(entity)}" data-record="${esc(recordId)}">${icon('out')}${text}</button>` : '';
     const missed = f.createDeal && !made.dealId;
-    const result = missed ? `${v.contact.name} is converted, but CRM did not return a deal. Check the account in CRM.`
-      : f.createDeal ? `${v.contact.name} is converted. Deal "${f.dealName.trim()}" was created.` : `${v.contact.name} is converted to an account and contact, without a deal.`;
+    const result = missed ? `${nameCase(v.contact.name)} is converted, but CRM did not return a deal. Check the account in CRM.`
+      : f.createDeal ? `${nameCase(v.contact.name)} is converted. Deal "${f.dealName.trim()}" was created.` : `${nameCase(v.contact.name)} is converted to an account and contact, without a deal.`;
     const role = made.dealId && f.contactRole && !made.roleSet ? '<p class="note warm-note">The contact role could not be confirmed. Check Contact Roles on the deal in CRM.</p>' : '';
     $('#app').innerHTML = `<div class="hero"><div class="actions">${open(C.modules.deal, made.dealId, 'Open deal')}${open(C.modules.account, made.accountId, 'Open account')}${open(C.modules.contact, made.contactId, 'Open contact')}</div></div><p class="note ${missed ? 'bad' : 'good'}" role="status">${esc(result)}</p>${role}`;
     rail();
@@ -484,7 +485,7 @@
     if (ui.form === 'convert' && ui.conv) return convertForm();
     if (ui.form === 'invite') {
       const m = R.latestMeeting(V);
-      return `<div class="panel"><p><b>Send the meeting invitation${m.invited ? ' again' : ''}?</b></p><p>To ${esc(V.contact.name)} (${esc(V.contact.email)}), for the meeting on ${time(m.start)}.</p><p class="mute">CRM emails the client an invitation and adds them to the meeting.</p><button class="primary" data-do="invite">Send invitation</button> <button data-do="cancel">Cancel</button></div>`;
+      return `<div class="panel"><p><b>Send the meeting invitation${m.invited ? ' again' : ''}?</b></p><p>To ${esc(nameCase(V.contact.name))} (${esc(V.contact.email)}), for the meeting on ${time(m.start)}.</p><p class="mute">CRM emails the client an invitation and adds them to the meeting.</p><button class="primary" data-do="invite">Send invitation</button> <button data-do="cancel">Cancel</button></div>`;
     }
     if (ui.form === 'book' || ui.form === 'resched') return `<form class="panel" data-form="${ui.form}"><label>${ui.form === 'book' ? 'Meeting' : 'New meeting'} date and time<input type="datetime-local" name="start" required></label><button class="primary">${ui.form === 'book' ? 'Book meeting' : 'Reschedule'}</button> <button type="button" data-do="cancel">Cancel</button></form>`;
     return '';
@@ -537,7 +538,7 @@
     $('#count').textContent = (shown.length === list.length ? '' : shown.length + ' of ') + (list.partial ? 'first ' : '') + list.length;
     if ($('#leads').dataset.key !== key) {
       $('#leads').dataset.key = key;
-      $('#leads').innerHTML = view.map(c => `<button data-lead="${esc(c.id)}"><span class="face" style="--h:${hue(c.name)}" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></span>${c.status ? `<em class="st st-${norm(c.status)}">${esc(c.status)}</em>` : ''}</button>`).join('') || '<p class="mute">No leads match.</p>';
+      $('#leads').innerHTML = view.map(c => `<button data-lead="${esc(c.id)}"><span class="face" style="--h:${hue(c.name)}" aria-hidden="true">${esc(initials(c.name))}</span><span class="txt"><b>${esc(nameCase(c.name))}</b><small>${esc(nameCase(c.sub))}</small></span>${c.status ? `<em class="st st-${norm(c.status)}">${esc(c.status)}</em>` : ''}</button>`).join('') || '<p class="mute">No leads match.</p>';
       if (shown.length > view.length) $('#leads').insertAdjacentHTML('beforeend', '<p class="mute">Showing 200. Search to find others.</p>');
     }
     $('#leads').querySelectorAll('button').forEach(b => b.setAttribute('aria-current', b.dataset.lead === ui.id ? 'true' : 'false'));
@@ -634,7 +635,7 @@
         if (!ui.id) return Promise.resolve(db.live && db.leads()).then(list => { if (list) ui.list = list; rail(); }).catch(fail);
         return run(async () => { if (db.live) ui.list = await db.leads(); }, 'Leads refreshed.');
       case 'touches': ui.allTouches = !ui.allTouches; return say(null);
-      case 'optout': return run(() => db.optOut(V), V.contact.name + ' is opted out of email.');
+      case 'optout': return run(() => db.optOut(V), nameCase(V.contact.name) + ' is opted out of email.');
       case 'call': return run(() => db.addCall(V), 'Call task added.');
       case 'toCold': return run(() => db.toCold(V, m), 'Returned to Cold after ' + C.maxReschedules + ' reschedules.');
       case 'email':
