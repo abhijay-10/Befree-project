@@ -23,13 +23,13 @@
   }
 
   function renderWonLost(data, state) {
-    const card = reportCard("Deals won vs lost", "Last 6 months · " + countryLabel(state), data.unavailable, "rp-fill");
+    const card = reportCard("Deals won vs lost", "Closing date in " + App.periodText(state.range) + " · " + countryLabel(state), data.unavailable, "rp-fill");
     const series = [{ key: "won", name: "Won", color: "var(--green)" }, { key: "lost", name: "Lost", color: "var(--pink)" }];
-    const max = Math.max.apply(null, [1].concat(...data.wonLost.map(function (m) { return [m.won, m.lost]; })));
+    const max = Math.max.apply(null, [1].concat(...data.periodBars.map(function (m) { return [m.won, m.lost]; })));
 
     // Reuses the grouped-bar styles (.ov-chart*).
     const chart = el("div", "ov-chart rp-bars");
-    data.wonLost.forEach(function (m) {
+    data.periodBars.forEach(function (m) {
       const col = el("div", "ov-chart-col");
       const bars = el("div", "ov-chart-bars");
       series.forEach(function (s) {
@@ -142,13 +142,13 @@
 
   // Returns the card; call card.draw() once it is in the document.
   function renderRevenue(data, state) {
-    const card = reportCard("Revenue trend", "₹ lakh · " + countryLabel(state), data.unavailable);
+    const card = reportCard("Revenue trend", "₹ lakh · won, closing date in " + App.periodText(state.range) + " · " + countryLabel(state), data.unavailable);
     card.draw = function () {};
     if (!window.Chart) {
       card.body.appendChild(emptyNote("The chart library could not be loaded."));
       return card;
     }
-    const months = data.revenueTrend;
+    const months = data.periodBars;
     const lakhs = months.map(function (m) { return Math.round(m.revenue / 1e4) / 10; });
     const box = el("div", "rp-line");
     const canvas = el("canvas");

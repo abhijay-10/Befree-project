@@ -44,6 +44,7 @@
 .pz-leads .mk-lead-bar > span { border-radius: 99px; background: linear-gradient(90deg, #C3D0FB, #7E98EE); }
 .pz-leads .mk-lead-bar > .mk-lead-moved { background: linear-gradient(90deg, #5FD0A2, #12925F); }
 .pz-chip { display: inline-block; margin-left: 2px; padding: 1px 8px; border-radius: 99px; background: #e3f6ed; color: #0d6b44; font-size: 11.5px; font-weight: 700; }
+.pz-chip.is-zero { background: #eef1f7; color: #6b7280; }
 .pz-card :is(.hbar-fill, .rp-attr-bar, .mk-lead-bar > span) { transform-origin: left center; animation: pz-grow .7s ease-out backwards; animation-delay: calc(var(--i, 0) * 50ms); }
 @keyframes pz-grow { from { transform: scaleX(0); } }
 
@@ -55,7 +56,8 @@
 .pz-badge { display: inline-block; min-width: 40px; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--row) 13%, #fff); color: var(--row); font-size: 11.5px; font-weight: 700; text-align: center; }
 
 /* Totals in a soft footer pill, pinned to the bottom */
-.pz-stage .ov-stage-total { margin: auto 0 0; align-self: flex-start; padding: 7px 14px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 9%, #fff); color: color-mix(in srgb, var(--accent) 80%, #111); }
+.pz-stage > .card-body { justify-content: space-between; } /* rows spread over the card's height, total at the bottom */
+.pz-stage .ov-stage-total { margin: 12px 0 0; align-self: flex-start; padding: 7px 14px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 9%, #fff); color: color-mix(in srgb, var(--accent) 80%, #111); }
 .pz-stage .ov-funnel-row:last-of-type { margin-bottom: 14px; }
 :is(.pz-channel, .pz-attribution) .rp-attr-total { margin: auto -8px 0; padding: 10px 8px; border-top: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, #fff); }
 

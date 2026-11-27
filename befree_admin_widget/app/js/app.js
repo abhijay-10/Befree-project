@@ -238,7 +238,17 @@ window.App = (function () {
   /* ---------- Period and Won / Won + Open wording, shared by every card ---------- */
 
   const PERIOD_TEXT = { "7d": "the last 7 days", "30d": "the last 30 days", "90d": "the last 90 days", "12m": "the last 12 months", all: "all time" };
-  function periodText(range) { return PERIOD_TEXT[range]; }
+  // A custom range: "27 Nov – 13 Dec", with the year when it is not this year
+  function customText(from, to) {
+    const day = function (v) { const p = String(v).split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); };
+    const a = day(from), b = day(to), year = new Date().getFullYear();
+    const opts = a.getFullYear() === year && b.getFullYear() === year ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" };
+    const f = function (d) { return d.toLocaleDateString("en-GB", opts); };
+    return from === to ? f(a) : f(a) + " – " + f(b);
+  }
+  function periodText(range) {
+    return range === "custom" ? customText(Store.state.from, Store.state.to) : PERIOD_TEXT[range];
+  }
 
   // Names the selected option and the dates it covers.
   function optionText(option, range) {
@@ -248,13 +258,15 @@ window.App = (function () {
   }
 
   // "Won only" / "Won + Open" switch. Each card keeps its own choice.
-  function optionSwitch(current, onPick) {
-    const box = el("div", "ov-toggle opt-switch");
+  // compact: a smaller switch with "Won" as its first label, to fit beside a KPI value (Marketing cards).
+  function optionSwitch(current, onPick, compact) {
+    const box = el("div", "ov-toggle opt-switch" + (compact ? " is-compact" : ""));
     box.setAttribute("role", "group");
     box.setAttribute("aria-label", "Deals included");
-    [["won", "Won only"], ["wonOpen", "Won + Open"]].forEach(function (o) {
+    [["won", compact ? "Won" : "Won only", "Won only: won deals, closing date in the period"], ["wonOpen", "Won + Open", "Won deals plus deals open today"]].forEach(function (o) {
       const b = el("button", "", o[1]);
       b.type = "button";
+      if (compact) b.title = o[2];
       b.setAttribute("aria-pressed", String(o[0] === current));
       b.addEventListener("click", function () { if (o[0] !== current) onPick(o[0]); });
       box.appendChild(b);
@@ -476,14 +488,56 @@ window.App = (function () {
     const country = document.getElementById("country-select");
     const range = document.getElementById("date-select");
     country.value = Store.state.country;
-    range.value = Store.state.range;
     country.addEventListener("change", function () { Store.setCountry(country.value); });
-    range.addEventListener("change", function () { Store.setRange(range.value); });
+
+    // Date range: the presets, or "Custom range…", which opens a From / To panel. An applied custom range
+    // shows its dates in the dropdown ("27 Nov – 13 Dec").
+    const customOption = range.querySelector('option[value="custom"]');
+    const pop = document.getElementById("date-pop");
+    const fromInput = document.getElementById("date-from"), toInput = document.getElementById("date-to");
+    const error = document.getElementById("date-error");
+    const iso = function (d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    function syncRange() {
+      const s = Store.state;
+      customOption.hidden = s.range !== "custom";
+      if (s.range === "custom") customOption.textContent = periodText("custom");
+      range.value = s.range;
+    }
+    function closePicker() {
+      pop.hidden = true;
+      syncRange();
+    }
+    function openPicker() {
+      const s = Store.state, today = new Date();
+      fromInput.value = s.range === "custom" ? s.from : iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29));
+      toInput.value = s.range === "custom" ? s.to : iso(today);
+      error.hidden = true;
+      pop.hidden = false;
+      fromInput.focus();
+    }
+    syncRange();
+    range.addEventListener("change", function () {
+      if (range.value === "pick") openPicker();
+      else { pop.hidden = true; Store.setRange(range.value); }
+    });
+    pop.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const from = fromInput.value, to = toInput.value;
+      const problem = !from || !to ? "Choose both dates." : to < from ? "The To date is before the From date." : "";
+      error.textContent = problem;
+      error.hidden = !problem;
+      if (problem) return;
+      Store.setCustom(from, to);
+      closePicker();
+    });
+    document.getElementById("date-cancel").addEventListener("click", closePicker);
+    pop.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePicker(); range.focus(); } });
+    document.addEventListener("mousedown", function (e) { if (!pop.hidden && !pop.contains(e.target) && e.target !== range) closePicker(); });
 
     window.addEventListener("filters:changed", function () {
       // Keep the header selects in step when something else changed the filters.
       country.value = Store.state.country;
-      range.value = Store.state.range;
+      syncRange();
       Object.keys(PAGE_NAMES).forEach(function (id) { stale.add(id); });
       updateHeading();
       renderTab(activeTab);
@@ -494,7 +548,7 @@ window.App = (function () {
       renderTab(activeTab);
     });
     bindCreateMenu();
-    // TODO: actions for #global-search and #notifications-btn
+    // TODO: actions for #notifications-btn (the header search is in global-search.js)
   }
 
   // One look for every chart: dashed gridlines and a dark rounded tooltip. Data and datasets are untouched.

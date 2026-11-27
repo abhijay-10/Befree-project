@@ -68,6 +68,8 @@
     const s = by(D.service);
     return {
       read: true, stageIds: idNames(by(D.stage)), stages: values(by(D.stage)), reasons: values(by(D.lostReason)),
+      // A deal can come back with a stage's label ("Identify Decision Makers") instead of its value ("Id. Decision Makers")
+      stageByLabel: Object.fromEntries(((by(D.stage) || {}).pick_list_values || []).filter(p => p.display_value && p.actual_value).map(p => [p.display_value, p.actual_value])),
       notFound: Object.values(D).concat(Object.values(C.serviceAmounts), Object.entries(X).filter(([k, n]) => n && !k.startsWith('touch')).map(e => e[1])).filter(n => !by(n)),
       service: s ? {
         field: s.api_name, label: s.field_label || 'Service', multi: s.data_type === 'multiselectpicklist',
@@ -143,7 +145,7 @@
         safe('history', related(dealId, 'Stage_History')),
         hasTouches && accountId ? safe('touches', touches(accountId)) : null
       ]);
-      const stage = r[D.stage] || '', befree = R.befreeStage(stage);
+      const stage = (m.stageByLabel || {})[r[D.stage]] || r[D.stage] || '', befree = R.befreeStage(stage);
       const prob = r[D.probability] === null || r[D.probability] === undefined ? (befree ? befree.prob : null) : Number(r[D.probability]);
       return {
         notes: (notes || []).map(n => ({ title: n.Note_Title || '', text: n.Note_Content || '' })),

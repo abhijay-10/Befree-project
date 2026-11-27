@@ -155,6 +155,31 @@
     const x = r && r.data && r.data[0];
     if (!x || x.code !== 'SUCCESS') throw new Error(why(x || r));
   }
+  // CRM's Send Mail API for a lead. The JS SDK has no sendMail method, so the request goes through zrc,
+  // the request client in SDK 1.5 that calls CRM's API (v7 or later) as the signed-in user. No CRM function is needed.
+  async function sendMail(leadId, mail) {
+    const client = root.zrc;
+    if (!client || typeof client.post !== 'function') throw new Error('this Zoho SDK cannot reach CRM Send Mail. Reload the page and try again.');
+    let r;
+    try {
+      r = await client.post('/crm/v7/Leads/' + encodeURIComponent(leadId) + '/actions/send_mail', { data: [mail] });
+    } catch (e) {
+      throw new Error(mailWhy(e && (e.response || e.detail)) || (e && e.message) || 'Unknown error');
+    }
+    let body = r && r.data !== undefined ? r.data : r;
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { /* not JSON */ } }
+    const x = body && body.data && body.data[0];
+    if (!x || String(x.code).toUpperCase() !== 'SUCCESS') throw new Error(mailWhy(body) || why(r));
+  }
+  // CRM's reason from a Send Mail answer, with the field it is about
+  function mailWhy(a) {
+    if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { return a; } }
+    if (a && a.data !== undefined && !Array.isArray(a.data)) return mailWhy(a.data); // zrc response: the body is in data
+    const x = (a && a.data && a.data[0]) || a;
+    if (!x || typeof x !== 'object' || !(x.message || x.code)) return '';
+    const field = x.details && x.details.api_name;
+    return (x.message || x.code) + (field ? ' (' + field + ')' : '');
+  }
   const update = (entity, data) => saved(ZOHO.CRM.API.updateRecord({ Entity: entity, APIData: data, Trigger: ['workflow'] }));
   const insert = (entity, data) => saved(ZOHO.CRM.API.insertRecord({ Entity: entity, APIData: data, Trigger: ['workflow'] }));
 
@@ -237,17 +262,20 @@
     // Sends the meeting invitation. Zoho does not reliably email meeting invitations when a meeting is saved
     // through the API (the participant's "invited" flag stays false), so the widget no longer waits for that.
     // 1. The lead is added to the meeting as a participant, without Zoho's own notification (no double email).
-    // 2. The invitation is emailed to the lead with CRM's Send Mail, from the signed-in user's CRM email address.
-    //    CRM answers whether the email was accepted, so the widget knows it went out.
+    // 2. The invitation is emailed to the lead with CRM's Send Mail API (sendMail above), from the signed-in user's
+    //    CRM email address. CRM answers whether the email was accepted, so the widget knows it went out.
     // 3. A note on the lead records it (this note is what unlocks Convert to Deal).
+    // A failure says which step failed and CRM's reason.
     async invite(v, m) {
       const from = v.user && v.user.email;
       if (!from) throw new Error('Your CRM user has no email address, so the invitation cannot be sent from CRM.');
       if (!v.contact.email) throw new Error('This lead has no email address.');
-      const meeting = await one(M.meeting, m.id);
+      if (v.contact.optedOut) throw new Error('This lead has opted out of email, so no invitation was sent.');
+      const step = async (what, job) => { try { return await job(); } catch (e) { throw new Error(what + ': ' + ((e && e.message) || 'Unknown error')); } };
+      const meeting = await step('The meeting could not be read', () => one(M.meeting, m.id));
       if (!guestOf(meeting, v.contact.id, v.contact.email)) {
         const guests = (meeting.Participants || []).map(p => ({ id: p.id, type: p.type, participant: id(p.participant) }));
-        await update(M.meeting, { id: m.id, Participants: guests.concat({ type: 'lead', participant: v.contact.id }), $send_notification: false });
+        await step('The lead could not be added to the meeting', () => update(M.meeting, { id: m.id, Participants: guests.concat({ type: 'lead', participant: v.contact.id }), $send_notification: false }));
       }
       const html = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
       const start = new Date(meeting[F.meeting.start] || m.start), end = new Date(meeting[F.meeting.end] || start.getTime() + 1800000);
@@ -258,12 +286,13 @@
       const content = `<p>Hi ${html(v.contact.name)},</p><p>You are invited to a meeting with ${html(host)}.</p>` +
         `<p><b>${html(title)}</b><br>${html(when)}<br>Duration: ${minutes} minutes</p>` +
         `<p>Please reply to this email to confirm, or to suggest another time.</p><p>Kind regards,<br>${html(host)}</p>`;
-      await saved(ZOHO.CRM.API.sendMail({ Entity: 'Leads', RecordID: v.contact.id, APIData: { data: [{
+      await step('The invitation email was not sent', () => sendMail(v.contact.id, {
         from: { user_name: host, email: from }, to: [{ user_name: v.contact.name, email: v.contact.email }],
         subject: 'Meeting invitation: ' + title + ' on ' + start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
         content, mail_format: 'html'
-      }] } }));
-      await saved(ZOHO.CRM.API.addNotes({ Entity: 'Leads', RecordID: v.contact.id, Title: C.inviteNote, Content: 'Emailed from ' + from + ' to ' + v.contact.email + ' for the meeting on ' + start.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.' }));
+      }));
+      await step('The invitation email was sent, but the note recording it was not saved, so do not send it again. Add a note titled "' + C.inviteNote + '" on this lead instead',
+        () => saved(ZOHO.CRM.API.addNotes({ Entity: 'Leads', RecordID: v.contact.id, Title: C.inviteNote, Content: 'Emailed from ' + from + ' to ' + v.contact.email + ' for the meeting on ' + start.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '.' })));
     },
     move: (v, m, start) => update(M.meeting, { id: m.id, [F.meeting.start]: stamp(start), [F.meeting.end]: stamp(new Date(start.getTime() + 1800000)), [v.isLead ? C.lead.reschedules : F.meeting.reschedules]: m.reschedules + 1 }),
     outcome: (v, m, f) => update(M.meeting, only({ id: m.id, [v.isLead ? C.lead.outcome : F.meeting.outcome]: f.outcome, [v.isLead ? C.lead.reason : F.meeting.reason]: f.outcome === 'Rejected' ? f.reason : null })),

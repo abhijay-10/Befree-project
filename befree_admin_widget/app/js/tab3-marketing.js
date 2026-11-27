@@ -48,8 +48,9 @@
   }
 
   /*
-   * One KPI card. k = { title, icon, tone, value, sub, from, delta, check, total, option }
-   * A card with a switch always keeps the same rows (the Won / Open / Total line is reserved, not added),
+   * One KPI card. k = { title, icon, tone, value, sub, subNode, from, delta, check, toggle }
+   * Every card has the same four rows (title, value, description, source), so the cards line up with no empty space.
+   * A card with a switch puts it beside the value, and its Won / Open / Total line takes the description's place,
    * so clicking the switch never moves the page.
    */
   function kpi(k) {
@@ -61,9 +62,17 @@
     if (k.delta) top.appendChild(trend(k.delta));
     const value = el("div", "mk-kpi-value", k.value);
     if (k.check) value.dataset.check = k.check;
-    card.append(top, value, el("p", "mk-kpi-sub", k.sub || " "));
-    if (k.option) card.appendChild(k.option);
-    card.appendChild(el("p", "mk-kpi-from", "From " + k.from));
+    let main = value;
+    if (k.toggle) {
+      main = el("div", "mk-kpi-valuerow");
+      main.append(value, k.toggle);
+    }
+    let sub = k.subNode;
+    if (sub) sub.classList.add("mk-kpi-sub");
+    else sub = el("p", "mk-kpi-sub", k.sub || " ");
+    const from = el("p", "mk-kpi-from", "From " + k.from);
+    from.title = "From " + k.from; // one line on the card, the full source on hover
+    card.append(top, main, sub, from);
     return card;
   }
 
@@ -74,15 +83,21 @@
       const o = choice[field];
       const won = data.options.won[field], open = data.options.open[field];
       const value = o === "won" ? won : data.options.wonOpen[field];
-      const optionBox = el("div", "mk-kpi-option");
-      const split = App.splitLine(won, open);
-      if (o === "won") split.classList.add("is-reserved"); // keeps its space, so nothing moves
-      optionBox.append(split, App.optionSwitch(o, function (next) { choice[field] = next; draw(); }));
+      // Won + Open: the Won / Open / Total line stands in the description's place
+      let split = null;
+      if (o !== "won") {
+        split = App.splitLine(won, open);
+        split.title = "Won in " + App.periodText(state.range) + ", plus deals open today";
+        // The big value is already the total, so only Won and Open are shown here (one line, nothing moves)
+        const total = split.querySelector(".is-total");
+        if (total) total.remove();
+      }
       const card = kpi(Object.assign({}, base, {
         value: App.formatINR(value),
-        sub: o === "won" ? "Won deals, closing date in " + App.periodText(state.range) : "Won in " + App.periodText(state.range) + ", plus deals open today",
+        sub: "Won deals, closing date in " + App.periodText(state.range),
+        subNode: split,
         delta: o === "won" ? deltaWon : undefined,
-        option: optionBox
+        toggle: App.optionSwitch(o, function (next) { choice[field] = next; draw(); }, true)
       }));
       card.dataset.check = "switch-" + field;
       card.dataset.option = o;
@@ -156,7 +171,7 @@
       moved.style.width = (r.moved / max * 100) + "%";
       bar.append(fill, moved);
       row.append(el("span", "mk-lead-label", r.channel), bar,
-        el("span", "mk-lead-value", App.formatCount(r.leads) + (r.moved ? " · " + App.formatCount(r.moved) + " to deals" : "")));
+        el("span", "mk-lead-value", App.formatCount(r.leads) + " · " + App.formatCount(r.moved || 0) + (r.moved === 1 ? " to deal" : " to deals")));
       card.body.appendChild(row);
     });
     if (!rows.length) card.body.appendChild(el("p", "ov-muted", "No leads from marketing channels in this period."));

@@ -1,15 +1,13 @@
 /*
  * Deals Pipeline funnel (Admin Overview). Read-only: it only counts the deals the Overview already loaded
  * (data.deals, already limited to the header country) by Stage, in the order of the CRM Stage pick list
- * (Data.STAGES, Closed-won last; lost deals are not a step). The period filters on Created Time.
+ * (Data.STAGES, Closed-won last; lost deals are not a step). The header's date range filters on Created Time.
  */
 window.DealsFunnel = (function () {
   "use strict";
 
-  const PERIODS = [["thisMonth", "This Month"], ["lastMonth", "Last Month"], ["last30", "Last 30 Days"], ["all", "All Time"]];
   const PALETTE = ["#7C5CE0", "#3B6FF0", "#14A89A", "#F0932B", "#E0559A"]; // purple, blue, teal, orange, pink
   const NS = "http://www.w3.org/2000/svg";
-  let period = "thisMonth";
 
   const el = function (tag, cls, text) {
     const n = document.createElement(tag);
@@ -38,19 +36,9 @@ window.DealsFunnel = (function () {
     });
   }
 
-  // [from, to) of a period, in local time; from = null means all time.
-  function range(key, now) {
-    const month = function (offset) { return new Date(now.getFullYear(), now.getMonth() + offset, 1); };
-    if (key === "thisMonth") return [month(0), month(1)];
-    if (key === "lastMonth") return [month(-1), month(0)];
-    if (key === "last30") return [new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29), null];
-    return [null, null];
-  }
-
-  // Number of deals per stage, in pipeline order.
-  function count(deals, stages, key, now) {
-    const r = range(key, now || new Date());
-    const inPeriod = deals.filter(function (d) { return !r[0] || (d.created && d.created >= r[0] && (!r[1] || d.created < r[1])); });
+  // Number of deals per stage, in pipeline order. [from, to): the header's date range (null = no limit).
+  function count(deals, stages, from, to) {
+    const inPeriod = deals.filter(function (d) { return (!from && !to) || (d.created && (!from || d.created >= from) && (!to || d.created < to)); });
     return stages.map(function (s) {
       return { name: s.name, count: inPeriod.filter(function (d) { return d.stage === s.name; }).length };
     });
@@ -111,28 +99,20 @@ window.DealsFunnel = (function () {
     const header = el("header", "card-header df-header");
     const heading = el("div");
     heading.append(el("h2", "card-title", "Deals Pipeline"),
-      el("p", "card-subtitle", "Deals by current stage, by created date · " + countryLabel(state)));
-    const select = el("select", "df-period");
-    select.setAttribute("aria-label", "Pipeline period");
-    PERIODS.forEach(function (p) {
-      const o = el("option", "", p[1]);
-      o.value = p[0];
-      select.appendChild(o);
-    });
-    select.value = period;
-    header.append(heading, select);
+      el("p", "card-subtitle", "Deals by current stage, created in " + App.periodText(state.range) + " · " + countryLabel(state)));
+    header.append(heading);
     const body = el("div", "card-body");
     card.append(header, body);
 
     function draw() {
-      const rows = count(data.deals, Data.STAGES, period);
+      const rows = count(data.deals, Data.STAGES, data.periodFrom, data.periodTo);
       const total = rows.reduce(function (t, r) { return t + r.count; }, 0);
       card.dataset.total = total;
       body.replaceChildren();
       if (data.unavailable || !total) {
         const empty = el("div", "df-empty");
         empty.append(el("b", "", data.unavailable ? "Deals could not be loaded" : "No deals in this period"),
-          el("p", "", data.unavailable ? "Use refresh to try again." : "Choose another period to see the pipeline."));
+          el("p", "", data.unavailable ? "Use refresh to try again." : "Choose another date range at the top to see the pipeline."));
         body.appendChild(empty);
         return;
       }
@@ -174,7 +154,6 @@ window.DealsFunnel = (function () {
       body.append(main);
     }
 
-    select.addEventListener("change", function () { period = select.value; draw(); });
     draw();
     return card;
   }

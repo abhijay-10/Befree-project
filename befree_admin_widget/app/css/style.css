@@ -116,6 +116,17 @@ button { cursor: pointer; }
 .select-country { color: var(--blue); }
 .select-country select { padding-left: 38px; border-color: var(--blue); font-weight: 500; }
 .select option { color: var(--text); }
+/* Custom date range: a small From / To panel under the date dropdown */
+.date-pop { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; display: grid; gap: 10px; width: 260px; margin: 0; padding: 14px;
+  border: 1px solid var(--border); border-radius: 14px; background: #fff; box-shadow: 0 18px 40px -18px rgba(15, 23, 42, .35); color: var(--text); }
+.date-pop[hidden] { display: none; }
+.date-pop-title { margin: 0; font-size: 13px; font-weight: 700; }
+.date-pop label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.date-pop input { height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 13px; color: var(--text); }
+.date-pop input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(35, 82, 229, .14); outline: none; }
+.date-pop-error { margin: 0; color: var(--red); font-size: 12px; }
+.date-pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.select-date .date-pop .date-pop-actions button { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
 
 .btn-icon {
   display: grid;
@@ -209,6 +220,11 @@ button { cursor: pointer; }
 .card-subtitle { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 
 /* ---------- Horizontal bar row ---------- */
+/* Open leads by status: rows share the card's height (up to 64px each), the total sits at the bottom like the stage card */
+.ov-status-card { display: flex; flex-direction: column; }
+.ov-status-card > .card-body { flex: 1; display: flex; flex-direction: column; }
+.ov-status-card .hbar { flex: 1 1 0; max-height: 64px; }
+.ov-status-total { margin: auto 0 0; padding: 7px 14px; align-self: flex-start; border-radius: 99px; background: color-mix(in srgb, #8b5cf6 9%, #fff); color: color-mix(in srgb, #8b5cf6 80%, #111); font-size: 13px; font-weight: 600; }
 .hbar { display: grid; grid-template-columns: minmax(80px, 140px) 1fr auto; align-items: center; gap: 12px; padding: 6px 0; }
 .hbar-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hbar-track { height: 8px; border-radius: 99px; background: var(--blue-pale); overflow: hidden; }
@@ -291,6 +307,10 @@ button { cursor: pointer; }
 .ov-kpi-label { font-size: 13px; font-weight: 700; }
 .ov-kpi-sub { color: var(--muted); font-size: 12px; }
 .ov-kpi .sparkline { margin-top: auto; padding-top: 12px; height: 44px; flex: none; }
+/* Source line at the foot of each KPI card, like the Marketing cards: pushed to the bottom so the cards line up */
+.ov-kpi-from { margin: auto 0 0; padding-top: 10px; border-top: 1px dashed var(--border); color: #8a93a6; font-size: 11.5px; line-height: 1.4; }
+.ov-kpi-from::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--kpi-accent, var(--blue)); vertical-align: 1px; }
+.ov-kpi .sparkline + .ov-kpi-from { margin-top: 10px; }
 
 /* Two-column rows */
 .ov-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); }
@@ -298,8 +318,8 @@ button { cursor: pointer; }
 .ov-card-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 
 /* Funnel */
-.ov-funnel-row { display: grid; grid-template-columns: 175px minmax(0, 1fr); align-items: center; gap: 12px; padding: 4px 0; }
-.ov-funnel-label { font-size: 13px; }
+.ov-funnel-row { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: center; gap: 12px; padding: 4px 0; }
+.ov-funnel-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-funnel-bar {
   display: flex;
   align-items: center;
@@ -317,8 +337,6 @@ button { cursor: pointer; }
 .ov-stage-total { margin: 12px 0 0; font-size: 13px; font-weight: 600; }
 /* Won only / Won + Open switch cards */
 .opt-switch button { font-size: 12px; }
-.mk-kpi .opt-switch { align-self: flex-start; margin-top: 10px; }
-.mk-kpi-option { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .opt-split { margin: 4px 0 8px; color: var(--muted); font-size: 12px; }
 .rp-attr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 600; }
 .ov-kpi-note { margin-top: 4px; font-size: 11px; font-style: italic; }
@@ -601,15 +619,19 @@ button { cursor: pointer; }
 .mk-kpi-title { min-height: 0; font-size: 13.5px; font-weight: 600; color: #374151; }
 .mk-kpi-value { margin-top: 8px; font-size: 28px; font-weight: 700; letter-spacing: -.01em; color: #111827; overflow: hidden; text-overflow: ellipsis; }
 .mk-kpi-sub { margin: 0; min-height: 2.7em; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
-.mk-kpi-option { display: grid; gap: 8px; margin-top: 4px; }
-.mk-kpi-option .opt-switch { justify-self: start; margin: 0; }
+/* Switch cards: the Won only / Won + Open switch sits beside the value (wraps below it on a narrow card) */
+.mk-kpi-valuerow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 8px; }
+.mk-kpi-valuerow .mk-kpi-value { margin-top: 0; min-width: 0; }
+.mk-kpi .mk-kpi-valuerow .opt-switch { flex: none; margin: 0; }
+/* Won + Open: the Won / Open / Total chips stand in the description's place, so the card keeps its rows */
+.mk-kpi .opt-split.mk-kpi-sub { margin: 0; align-content: flex-start; }
 .mk-kpi-from { margin: auto 0 0; padding-top: 10px; border-top: 1px dashed var(--border); color: #8a93a6; font-size: 11.5px; }
 .mk-kpi-from::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--tone); vertical-align: 1px; }
 @keyframes mk-rise { from { opacity: 0; transform: translateY(8px); } }
 .mk-kpis > :nth-child(2) .mk-kpi, .mk-kpis > .mk-kpi:nth-child(2) { animation-delay: .04s; }
 .mk-kpis > .mk-kpi:nth-child(3) { animation-delay: .08s; } .mk-kpis > .mk-kpi:nth-child(4) { animation-delay: .12s; }
 .mk-split { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
-.mk-lead-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; }
+.mk-lead-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 140px; gap: 12px; align-items: center; padding: 8px 0; } /* fixed count slot: every track starts and ends at the same place */
 .mk-lead-label { font-size: 13px; color: #374151; }
 .mk-lead-bar { position: relative; height: 10px; border-radius: 6px; background: #eef1f7; overflow: hidden; }
 .mk-lead-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: #93A9F0; }
@@ -647,7 +669,7 @@ button { cursor: pointer; }
 @media (max-width: 760px) { .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---------- Revenue forecast ---------- */
-.fc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.fc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
 .fc-stat { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--fc, #C9C3FB); border-radius: 10px; background: #fff; min-width: 0; }
 .fc-stat span { color: var(--muted); font-size: 12px; }
 .fc-stat strong { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -655,6 +677,7 @@ button { cursor: pointer; }
 .fc-stat.is-won { --fc: #16A06B; } .fc-stat.is-won strong { color: #0d7a4f; }
 .fc-stat.is-forecast { --fc: #5B4CF0; } .fc-stat.is-forecast strong { color: #4334d6; }
 .fc-stat.is-best { --fc: #C9C3FB; }
+.fc-stat.is-pipeline { --fc: #0ea5e9; } .fc-stat.is-pipeline strong { color: #0369a1; }
 .fc-chart { position: relative; display: flex; height: 230px; padding-top: 4px; }
 .fc-col { display: flex; flex: 1; flex-direction: column; align-items: center; min-width: 0; padding: 0 4px; }
 .fc-bars { position: relative; display: flex; flex: 1; width: 100%; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--border); }
@@ -664,10 +687,12 @@ button { cursor: pointer; }
 .fc-bar.is-best { background: repeating-linear-gradient(135deg, #dcd7fd 0 6px, #ece9ff 6px 12px); }
 .fc-bar.is-forecast { width: 100%; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #7b6cf6, #5B4CF0); }
 .fc-value { height: 18px; line-height: 18px; margin-bottom: 6px; font-size: 11.5px; font-weight: 600; color: #374151; white-space: nowrap; }
-.fc-label { height: 22px; line-height: 14px; padding-top: 8px; color: var(--muted); font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fc-label { height: 36px; line-height: 14px; padding-top: 8px; color: var(--muted); font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .is-current .fc-label, .is-next .fc-label { color: #111827; font-weight: 600; }
+.fc-label small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }
 .is-next .fc-value { color: #4334d6; }
 .fc-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: #fff6e5; color: #7a4b00; font-size: 12.5px; }
+@media (max-width: 1100px) { .fc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .fc-stats { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Sales by owner ---------- */
@@ -699,11 +724,9 @@ button { cursor: pointer; }
 /* ===================== KPI cards: equal size, same structure ===================== */
 .mk-kpis { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; }
 .mk-kpis-extra { grid-template-columns: repeat(4, 1fr); }
-.mk-kpi { --kpi-accent: var(--tone); min-height: 248px; height: 100%; display: flex; flex-direction: column; }
+.mk-kpi { --kpi-accent: var(--tone); height: 100%; display: flex; flex-direction: column; }  /* height from the content: no empty band */
 .mk-kpi-slot { height: 100%; }
-.mk-kpi-option { margin-top: auto; }                       /* extra details pinned to the bottom */
-.mk-kpi-option + .mk-kpi-from { margin-top: 12px; }
-.mk-kpi-from { margin-top: auto; border-top: 1px dashed var(--border); }
+.mk-kpi-from { margin-top: auto; border-top: 1px dashed var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one line, so every dashed line sits at the same height */
 .ov-kpis { grid-auto-rows: 1fr; }
 .ov-kpi { min-height: 168px; height: 100%; position: relative; overflow: hidden; }
 .ov-kpis > .ov-kpi:nth-child(1) { --kpi-accent: #2352E5; } .ov-kpis > .ov-kpi:nth-child(2) { --kpi-accent: #7C5CE0; }
@@ -768,6 +791,12 @@ button { cursor: pointer; }
 .no-anim .opt-switch:has(button:first-child[aria-pressed="true"])::before, .is-switched .opt-switch:has(button:first-child[aria-pressed="true"])::before { animation: opt-left .25s var(--ui-ease); }
 @keyframes opt-right { from { transform: translateX(0); } }
 @keyframes opt-left { from { transform: translateX(100%); } }
+/* Compact switch beside a Marketing KPI value: buttons keep their own width, the pressed one is filled */
+.opt-switch.is-compact { grid-template-columns: auto auto; }
+.opt-switch.is-compact::before { display: none; }
+.opt-switch.is-compact button { padding: 4px 10px; font-size: 11.5px; white-space: nowrap; transition: background-color .2s, color .2s, box-shadow .2s; }
+.opt-switch.is-compact button[aria-pressed="true"] { background: #fff; color: var(--blue); box-shadow: 0 1px 3px rgba(17, 24, 39, .18); }
+.opt-switch.is-compact button:last-child[aria-pressed="true"] { background: linear-gradient(90deg, #16A06B, #2352E5); color: #fff; }
 
 /* ===================== Deal and lead tables ===================== */
 .ov-toolbar { gap: 10px; align-items: center; }
@@ -815,14 +844,16 @@ button { cursor: pointer; }
 }
 
 /* Overview cards use the same order as Marketing: icon + title, then value and description */
-.ov-kpi { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr; column-gap: 10px; align-content: start; }
+.ov-kpi { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr auto; column-gap: 10px; align-content: start; }
 .ov-kpi-top { display: contents; }
 .ov-kpi .ov-tile { grid-column: 1; grid-row: 1; }
 .ov-kpi-label { grid-column: 2; grid-row: 1; align-self: center; line-height: 1.3; }
 .ov-kpi .ov-delta { grid-column: 3; grid-row: 1; align-self: center; }
 .ov-kpi-value { grid-column: 1 / -1; grid-row: 2; }
 .ov-kpi > .ov-kpi-sub { grid-column: 1 / -1; }
-.ov-kpi .sparkline { grid-column: 1 / -1; align-self: end; width: 100%; }
+.ov-kpi .sparkline { grid-column: 1 / -1; grid-row: 4; align-self: end; width: 100%; }
+/* Description line: full card width, always the last row at the very bottom (like the Marketing cards) */
+.ov-kpi > .ov-kpi-from { grid-column: 1 / -1; grid-row: 5; align-self: end; width: 100%; box-sizing: border-box; min-height: calc(2.8em + 10px); }
 @media (max-width: 560px) { .ov-kpis { grid-template-columns: 1fr; } .ov-kpi { min-height: 0; } }
 @media (prefers-reduced-motion: reduce) { .mk-ripple { display: none; } .mk-kpi::before, .ov-kpi::before, .mk-kpi-icon, .ov-tile { transition: none !important; } }
 

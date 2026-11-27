@@ -99,7 +99,7 @@ window.Checks = (function () {
     const shown = document.querySelector("#panel-" + tabId + " [data-check='influenced']");
     const switched = shown && shown.closest("[data-option]");
     if (shown && (!switched || switched.dataset.option === "won")) {
-      const key = state.country + "|" + state.range;
+      const key = state.country + "|" + state.range + (state.range === "custom" ? "|" + state.from + "|" + state.to : "");
       const seen = influencedSeen[key] = influencedSeen[key] || {};
       seen[tabId] = shown.textContent;
       const both = seen.overview !== undefined && seen.marketing !== undefined;

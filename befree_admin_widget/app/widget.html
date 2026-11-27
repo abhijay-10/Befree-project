@@ -7,11 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
-  <link rel="stylesheet" href="css/style.css?v=20261127a">
-  <link rel="stylesheet" href="css/deals-funnel.css?v=20261127a">
-  <link rel="stylesheet" href="css/widget-polish.css?v=20261127a">
-  <link rel="stylesheet" href="css/revenue-forecast.css?v=20261127a">
-  <link rel="stylesheet" href="css/admin-ui-v2.css?v=20261127a">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/deals-funnel.css">
+  <link rel="stylesheet" href="css/widget-polish.css">
+  <link rel="stylesheet" href="css/revenue-forecast.css">
+  <link rel="stylesheet" href="css/admin-ui-v2.css">
 </head>
 <body>
   <header class="topbar admin-v2-head">
@@ -24,7 +24,7 @@
       <div class="topbar-actions">
         <label class="search">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input type="search" id="global-search" placeholder="Search deals, accounts, contacts" aria-label="Search deals, accounts, contacts">
+          <input type="search" id="global-search" placeholder="Search deals, accounts, contacts…" aria-label="Search deals, accounts, contacts">
         </label>
 
         <div class="select select-country">
@@ -38,15 +38,27 @@
           <svg class="icon select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
         </div>
 
-        <div class="select">
+        <div class="select select-date">
           <select id="date-select" aria-label="Date range">
             <option value="7d">Last 7 days</option>
             <option value="30d" selected>Last 30 days</option>
             <option value="90d">Last 90 days</option>
             <option value="12m">Last 12 months</option>
             <option value="all">All time</option>
+            <option value="custom" hidden>Custom range</option>
+            <option value="pick">Custom range…</option>
           </select>
           <svg class="icon select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          <form class="date-pop" id="date-pop" hidden novalidate>
+            <p class="date-pop-title">Custom range</p>
+            <label>From <input type="date" id="date-from" required></label>
+            <label>To <input type="date" id="date-to" required></label>
+            <p class="date-pop-error" id="date-error" role="alert" hidden></p>
+            <div class="date-pop-actions">
+              <button type="button" class="btn-outline" id="date-cancel">Cancel</button>
+              <button type="submit" class="btn-primary">Apply</button>
+            </div>
+          </form>
         </div>
 
         <button type="button" class="btn-icon" id="notifications-btn" aria-label="Notifications">
@@ -82,18 +94,19 @@
   <script src="https://live.zwidgets.com/js-sdk/1.5/ZohoEmbededAppSDK.min.js"></script>
   <!-- Chart.js: service contribution and revenue trend charts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="js/app.js?v=20261127a"></script>
-  <script src="js/store.js?v=20261127a"></script>
-  <script src="js/data.js?v=20261127a"></script>
-  <script src="js/checks.js?v=20261127a"></script>
-  <script src="js/new-cards.js?v=20261127a"></script>
-  <script src="js/deals-funnel.js?v=20261127a"></script>
-  <script src="js/revenue-forecast-calc.js?v=20261127a"></script>
-  <script src="js/revenue-forecast.js?v=20261127a"></script>
-  <script src="js/tab1-overview.js?v=20261127a"></script>
-  <script src="js/tab2-reports.js?v=20261127a"></script>
-  <script src="js/tab3-marketing.js?v=20261127a"></script>
-  <script src="js/widget-polish.js?v=20261127a"></script>
-  <script src="js/admin-ui-v2.js?v=20261127a"></script>
+  <script src="js/app.js?v=20261127e"></script>
+  <script src="js/store.js?v=20261127e"></script>
+  <script src="js/data.js?v=20261127e"></script>
+  <script src="js/checks.js?v=20261127e"></script>
+  <script src="js/new-cards.js?v=20261127e"></script>
+  <script src="js/deals-funnel.js?v=20261127e"></script>
+  <script src="js/revenue-forecast-calc.js?v=20261127e"></script>
+  <script src="js/revenue-forecast.js?v=20261127e"></script>
+  <script src="js/tab1-overview.js?v=20261127e"></script>
+  <script src="js/tab2-reports.js?v=20261127e"></script>
+  <script src="js/tab3-marketing.js?v=20261127e"></script>
+  <script src="js/widget-polish.js?v=20261127e"></script>
+  <script src="js/admin-ui-v2.js?v=20261127e"></script>
+  <script src="js/global-search.js?v=20261127e"></script>
 </body>
 </html>

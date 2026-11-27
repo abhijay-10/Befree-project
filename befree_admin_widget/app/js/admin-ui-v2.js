@@ -156,7 +156,7 @@
   // [section, area key, columns, extra] in display order. Area keys come from each card's title.
   const LAYOUT = {
     overview: [
-      [null, "banner", 12], ["Key metrics", "kpis", 12], ["Forecast", "Revenue Forecast", 12],
+      [null, "banner", 12], ["Key metrics", "kpis", 12],
       ["Revenue & activity", "Revenue forecast", 8], [null, "Recent activity", 4, "fit"],
       ["Pipeline & performance", "Deals won vs lost", 6], [null, "Unconfirmed deals by stage", 6], [null, "Deals Pipeline", 6], [null, "At-risk deals", 6],
       ["Breakdowns", "Leads", 8], [null, "Open leads by status", 4], [null, "Service contribution", 12], [null, "Country comparison", 12],

@@ -5,7 +5,7 @@
   const PAGE_SIZE = 6;
 
   // Stage bucket colours, 10% to 90%.
-  const STAGE_COLORS = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2"];
+  const STAGE_COLORS = ["#2352E5", "#4069E8", "#5D80EB", "#7996EF", "#96ADF2", "#A9BCF4"];
   const GREY = "#DDE1E9"; // deselected chart segments
 
   // Constant SVG markup only (Lucide-style).
@@ -106,7 +106,7 @@
       { key: "unconfirmed", icon: "target", tone: "green", value: App.formatINR(k.unconfirmedAmount), label: "Unconfirmed amount",
         sub: "Open deals at 10% to 90%" },
       { key: "unconfirmedDeals", icon: "handshake", tone: "blue", value: App.formatCount(k.unconfirmedCount), label: "Unconfirmed deals", sub: "Open deals at 10% to 90%" },
-      { key: "winRate", icon: "percent", tone: "orange", value: App.formatPct(k.winRate), label: "Win rate", sub: "Won ÷ closed, last 6 months" },
+      { key: "winRate", icon: "percent", tone: "orange", value: App.formatPct(k.winRate), label: "Win rate", sub: "Won ÷ closed, closing date in " + App.periodText(state.range) },
       { key: "newAccounts", icon: "building", tone: "blue", value: App.formatCount(k.newAccounts), label: "New accounts", sub: "Created in this period" },
     ].forEach(function (item) {
       const card = el("article", "card ov-kpi");
@@ -125,10 +125,12 @@
 
       const value = el("div", "ov-kpi-value", item.value);
       if (item.check) value.dataset.check = item.check;
-      card.append(top, value, el("div", "ov-kpi-label", item.label), el("div", "ov-kpi-sub", item.sub));
+      card.append(top, value, el("div", "ov-kpi-label", item.label));
       if (item.note) card.appendChild(el("div", "ov-kpi-sub ov-kpi-note", item.note));
       const points = k.spark[item.key];
       if (points && points.length > 1) card.appendChild(App.sparkline(points, falling ? "var(--red)" : "var(--green)"));
+      // The description sits at the foot of every card (dashed line above), so the rows line up
+      card.appendChild(el("p", "ov-kpi-from", item.sub));
       row.appendChild(card);
     });
     return row;
@@ -227,7 +229,10 @@
   function renderForecast(data, state) {
     const f = data.revenueForecast;
     const span = f.days === 365 ? "12 months" : f.days + " days";
-    const card = App.card("Revenue forecast", "Next " + span + " from open deals, by Closing Date · " + countryLabel(state));
+    // A custom range: won in the range, and the open deals closing inside it from today on
+    const range = f.custom ? App.periodText("custom") : "";
+    const card = App.card("Revenue forecast", (f.custom ? "Open deals closing in " + range : "Next " + span + " from open deals") +
+      ", by Closing Date · " + countryLabel(state));
     card.classList.add("fc-card");
     const opts = f.days >= 365 ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" };
     const dayText = function (d) { return new Date(d + "T00:00:00").toLocaleDateString("en-GB", opts); };
@@ -240,9 +245,11 @@
     // Three plain figures: what was won, what is expected, and the most it could be
     const stats = el("div", "fc-stats");
     stats.append(
-      stat("Won · last " + span, App.formatINR(f.past[5].amount), f.past[5].count + (f.past[5].count === 1 ? " deal" : " deals"), "is-won"),
-      stat("Forecast · next " + span, App.formatINR(f.next.weighted), "Amount × stage %", "is-forecast"),
-      stat("Best case", App.formatINR(f.next.best), f.next.count + (f.next.count === 1 ? " open deal" : " open deals") + " closing", "is-best")
+      stat(f.custom ? "Won · " + range : "Won · last " + span, App.formatINR(f.past[5].amount), f.past[5].count + (f.past[5].count === 1 ? " deal" : " deals"), "is-won"),
+      stat(f.custom ? "Forecast · " + range : "Forecast · next " + span, f.over ? "—" : App.formatINR(f.next.weighted),
+        f.over ? "This range is over" : "Amount × stage %" + (f.overdue.counted && f.overdue.count ? " · incl. " + f.overdue.count + " overdue" : ""), "is-forecast"),
+      stat("Best case", App.formatINR(f.next.best), f.next.count + (f.next.count === 1 ? " open deal" : " open deals") + " at full amount", "is-best"),
+      stat("Open pipeline", App.formatINR(f.pipeline.weighted), plural(f.pipeline.count, "open deal") + " at 10% to 90% × stage %", "is-pipeline")
     );
     // Columns: the last 6 periods (won), then the next one (forecast inside best case)
     const max = Math.max.apply(null, [1, f.next.best].concat(f.past.map(function (p) { return p.amount; })));
@@ -257,7 +264,9 @@
       bar.style.height = (p.amount / max * 100) + "%";
       bar.title = short(p.from, p.to) + " · won " + App.formatINR(p.amount);
       bars.appendChild(bar);
-      col.append(el("span", "fc-value", p.amount ? App.formatINR(p.amount) : ""), bars, el("span", "fc-label", i === f.past.length - 1 ? "This period" : dayText(p.to)));
+      const label = el("span", "fc-label", short(p.from, p.to));
+      if (i === f.past.length - 1) label.appendChild(el("small", "", f.custom ? "Selected range" : "This period"));
+      col.append(el("span", "fc-value", p.amount ? App.formatINR(p.amount) : ""), bars, label);
       col.title = short(p.from, p.to);
       plot.appendChild(col);
     });
@@ -271,14 +280,17 @@
     weighted.title = "Forecast " + App.formatINR(f.next.weighted);
     best.appendChild(weighted);
     bars.appendChild(best);
-    col.append(el("span", "fc-value", f.next.best ? App.formatINR(f.next.weighted) : ""), bars, el("span", "fc-label", "Next " + span));
-    col.title = short(f.next.from, f.next.to);
+    const nextLabel = el("span", "fc-label", f.over ? "—" : short(f.next.from, f.next.to));
+    nextLabel.appendChild(el("small", "", f.custom ? (f.over ? "Range is over" : "Forecast") : "Next " + span));
+    col.append(el("span", "fc-value", f.next.best ? App.formatINR(f.next.weighted) : ""), bars, nextLabel);
+    col.title = f.over ? "" : short(f.next.from, f.next.to);
     plot.appendChild(col);
     card.body.append(stats, plot, App.legend([{ label: "Won", color: "#16A06B" }, { label: "Forecast", color: "#5B4CF0" },
       { label: "Best case", color: "#C9C3FB" }], "rp-legend fc-legend"));
     const notes = [];
-    if (f.overdue.count) notes.push(f.overdue.count + (f.overdue.count === 1 ? " open deal is" : " open deals are") + " past the Closing Date (" + App.formatINR(f.overdue.amount) + "), not in the forecast. Update their Closing Date.");
-    if (f.noDate) notes.push(f.noDate + (f.noDate === 1 ? " open deal has" : " open deals have") + " no Closing Date, not in the forecast.");
+    if (f.overdue.count) notes.push(f.overdue.count + (f.overdue.count === 1 ? " open deal is" : " open deals are") + " past the Closing Date (" + App.formatINR(f.overdue.amount) + ")" +
+      (f.overdue.counted ? " and counted in this forecast as still to close." : ", not in this forecast.") + " Update their Closing Date in CRM.");
+    if (f.noDate) notes.push(f.noDate + (f.noDate === 1 ? " open deal has" : " open deals have") + " no Closing Date: only in Open pipeline, not in the forecast.");
     notes.forEach(function (n) { card.body.appendChild(el("p", "fc-note", n)); });
     card.dataset.check = "forecast";
     return card;
@@ -286,18 +298,24 @@
 
   function renderLeadStatus(data, state) {
     const card = App.card("Open leads by status", countryLabel(state));
-    const rows = data.leads.byStatus;
+    card.classList.add("ov-status-card");
+    // Leads with an empty Lead Status in CRM are listed last, in grey, as "Status not set"
+    const unset = function (r) { return r.label === "No status"; };
+    const rows = data.leads.byStatus.filter(function (r) { return !unset(r); }).concat(data.leads.byStatus.filter(unset));
     const max = Math.max.apply(null, rows.map(function (r) { return r.count; }).concat(1));
     rows.forEach(function (r) {
-      card.body.appendChild(App.horizontalBarRow(r.label, App.formatCount(r.count), r.count / max * 100, "var(--blue)"));
+      const line = App.horizontalBarRow(unset(r) ? "Status not set" : r.label, App.formatCount(r.count), r.count / max * 100,
+        unset(r) ? "#9AA1B4" : "var(--blue)");
+      if (unset(r)) line.style.setProperty("--row", "#9AA1B4");
+      card.body.appendChild(line);
     });
     if (!rows.length) card.body.appendChild(el("p", "ov-muted", data.leads.open === null ? "Leads are not available." : "No open leads."));
+    else card.body.appendChild(el("p", "ov-status-total", "Total: " + plural(data.leads.open, "open lead")));
     return card;
   }
 
   function renderCountries(data, state) {
-    const card = App.card("Country comparison", "Leads and deals by country · confirmed: closing date in " + App.periodText(state.range) +
-      " · won and lost in the last 6 months");
+    const card = App.card("Country comparison", "Leads and deals by country · confirmed, won and lost: closing date in " + App.periodText(state.range));
     const names = { US: "United States", UK: "United Kingdom", AU: "Australia", Other: "Country not set" };
     const columns = ["Country", "Leads created", "Open leads", "Moved to deals", "Confirmed deals", "Confirmed amount", "Won", "Lost", "Win rate"];
     const table = el("table", "ov-table");
@@ -598,7 +616,7 @@
   /* ================= Won vs lost, activity ================= */
 
   function renderWonLost(data, state) {
-    const card = App.card("Deals won vs lost", "Last 6 months · " + countryLabel(state));
+    const card = App.card("Deals won vs lost", "Closing date in " + App.periodText(state.range) + " · " + countryLabel(state));
     const header = card.querySelector(".card-header");
     header.classList.add("ov-card-header");
     const heading = el("div");
@@ -615,7 +633,7 @@
       header.querySelector(".card-title").textContent = ui.chart === "revenue" ? "Revenue won" : "Deals won vs lost";
 
       const revenue = ui.chart === "revenue";
-      const months = revenue ? data.revenueTrend : data.wonLost;
+      const months = data.periodBars;
       const series = revenue
         ? [{ key: "revenue", name: "Revenue", color: "var(--blue)", format: App.formatINR }]
         : [{ key: "won", name: "Won", color: "var(--green)", format: App.formatCount },
@@ -641,12 +659,12 @@
         plot.appendChild(col);
       });
 
-      const won = data.wonLost.reduce(function (t, m) { return t + m.won; }, 0);
-      const lost = data.wonLost.reduce(function (t, m) { return t + m.lost; }, 0);
+      const won = months.reduce(function (t, m) { return t + m.won; }, 0);
+      const lost = months.reduce(function (t, m) { return t + m.lost; }, 0);
       const totals = el("div", "nc-stats");
       totals.append(
-        stat("Won", App.formatCount(won), App.formatINR(data.revenueTrend.reduce(function (t, m) { return t + m.revenue; }, 0))),
-        stat("Lost", App.formatCount(lost), App.formatINR(data.wonLost.reduce(function (t, m) { return t + m.lostValue; }, 0))),
+        stat("Won", App.formatCount(won), App.formatINR(months.reduce(function (t, m) { return t + m.revenue; }, 0))),
+        stat("Lost", App.formatCount(lost), App.formatINR(months.reduce(function (t, m) { return t + m.lostValue; }, 0))),
         stat("Win rate", App.formatPct(data.kpis.winRate), "Won ÷ closed")
       );
       card.body.replaceChildren(totals, plot, App.legend(series.map(function (s) {
@@ -665,7 +683,7 @@
   }
 
   function renderActivity(data, state) {
-    const card = App.card("Recent activity", "Contacts, accounts and deals · " + countryLabel(state));
+    const card = App.card("Recent activity", "Contacts, accounts and deals in " + App.periodText(state.range) + " · " + countryLabel(state));
     data.recentActivity.forEach(function (a) {
       const row = el("div", "ov-activity");
       const tile = el("div", "ov-tile ov-tile-blue");
@@ -676,7 +694,7 @@
       if (a.pill) row.appendChild(App.pill(a.pill, a.pillType));
       card.body.appendChild(row);
     });
-    if (!data.recentActivity.length) card.body.appendChild(el("p", "ov-muted", "No recent activity."));
+    if (!data.recentActivity.length) card.body.appendChild(el("p", "ov-muted", "No activity in " + App.periodText(state.range) + "."));
     return card;
   }
 
@@ -944,22 +962,7 @@
     risk.append(renderForecast(data, state), Cards.atRisk(data, state));
     const leads = el("div", "ov-split ov-split-wide");
     leads.append(renderLeads(data, state), renderLeadStatus(data, state));
-    // If the Revenue Forecast cannot be shown, its place says why and the rest of the Overview still shows
-    let forecastSection;
-    try {
-      const missing = !window.RevenueForecastSection ? "js/revenue-forecast.js" : !window.RevenueForecastCalc ? "js/revenue-forecast-calc.js" : "";
-      if (missing) throw new Error(missing + " did not load. Upload the whole app folder to Zoho, then refresh with Ctrl + F5.");
-      forecastSection = window.RevenueForecastSection.render(data, state);
-    } catch (err) {
-      console.error("[widget] Revenue Forecast section could not be displayed", err);
-      forecastSection = el("article", "card rf-card");
-      const head = el("header", "card-header");
-      head.appendChild(el("h2", "card-title", "Revenue Forecast"));
-      const body = el("div", "card-body");
-      body.appendChild(el("p", "placeholder", "The Revenue Forecast could not be displayed. " + ((err && err.message) || "Unknown error")));
-      forecastSection.append(head, body);
-    }
-    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), forecastSection, DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
+    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
       renderTable(data, state));
     services.draw();
   }

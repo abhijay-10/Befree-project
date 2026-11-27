@@ -31,7 +31,8 @@ function view(rows, country = 'ALL', range = '30d', extra = {}) {
   T.tagChannels(all.deals, all.campaigns, all.touches);
   const raws = ['US', 'UK', 'AU', T.OTHER_COUNTRY].map(c => T.liveRaw(c, range, all));
   const picked = country === 'ALL' ? raws : raws.filter(r => r.code === country);
-  return T.build(picked, { country, range }, 'live');
+  // A custom range is { range: 'custom', from, to }, as in the header state
+  return T.build(picked, typeof range === 'string' ? { country, range } : Object.assign({ country }, range), 'live');
 }
 const won = o => row(Object.assign({ Stage: 'Closed Won', Closing_Date: day(-3) }, o));
 
@@ -39,9 +40,13 @@ const won = o => row(Object.assign({ Stage: 'Closed Won', Closing_Date: day(-3) 
 
 test('stage decides the group and the %, not the Probability field', () => {
   assert.equal(T.stageBucket('Qualification'), 10);
-  assert.equal(T.stageBucket('Needs Analysis'), 25);
-  assert.equal(T.stageBucket('Value Proposition'), 50);
-  assert.equal(T.stageBucket('Id. Decision Makers'), 50);
+  assert.equal(T.stageBucket('Needs Analysis'), 20);
+  assert.equal(T.stageBucket('Value Proposition'), 40);
+  assert.equal(T.stageBucket('Identify Decision Makers'), 60);
+  // Zoho may give the same stage as "Id. Decision Makers": one stage, one name, 60%
+  const idDm = T.toDeal(row({ Stage: 'Id. Decision Makers' }));
+  assert.equal(idDm.stage, 'Identify Decision Makers');
+  assert.equal(idDm.bucket, 60);
   assert.equal(T.stageBucket('Proposal/Price Quote'), 75);
   assert.equal(T.stageBucket('Negotiation/Review'), 90);
   assert.equal(T.stageBucket('Verbal commitment'), 90);
@@ -59,7 +64,7 @@ test('stage buckets add up exactly to the unconfirmed KPIs, including unmapped s
     row({ Stage: 'Some new stage', Amount: 7 }), won({ Amount: 999 }), row({ Stage: 'Closed Lost', Amount: 5 })
   ]);
   const b = data.byBucket;
-  assert.deepEqual([10, 25, 50, 75, 90].map(k => b[k].count), [2, 0, 1, 0, 1]);
+  assert.deepEqual([10, 20, 40, 60, 75, 90].map(k => b[k].count), [2, 0, 1, 0, 0, 1]);
   assert.equal(b.none.count, 1);
   const count = Object.values(b).reduce((t, x) => t + x.count, 0);
   const amount = Object.values(b).reduce((t, x) => t + x.amount, 0);
@@ -67,7 +72,7 @@ test('stage buckets add up exactly to the unconfirmed KPIs, including unmapped s
   assert.equal(count, 5);
   assert.equal(amount, data.kpis.unconfirmedAmount);
   assert.equal(amount, 657.5);
-  assert.equal(data.kpis.weighted, 150.5 * 0.1 + 200 * 0.5 + 300 * 0.9);
+  assert.equal(data.kpis.weighted, 150.5 * 0.1 + 200 * 0.4 + 300 * 0.9);
   assert.equal(data.kpis.confirmedAmount, 999);
   assert.equal(data.kpis.confirmedCount, 1);
 });
@@ -176,7 +181,7 @@ const mixed = () => [
   won({ Country: '', Amount: 50, Closing_Date: day(-400) }),
   row({ Country: 'US', Amount: 1500000, Stage: 'Qualification', Lead_Source: 'Email' }),
   row({ Country: 'AU', Amount: 5000000, Stage: 'Negotiation/Review', Services_List: ['Accounting Services', 'Bookkeeping Services', 'Tax Services'] }),
-  row({ Country: '', Amount: 100, Stage: 'Id. Decision Makers' }),
+  row({ Country: '', Amount: 100, Stage: 'Identify Decision Makers' }),
   row({ Country: 'UK', Amount: 9, Stage: 'Closed Lost' }),
   row({ Country: 'US', Amount: 77, Stage: 'Closed-Lost to Competition', Closing_Date: day(-1) })
 ];
@@ -277,4 +282,95 @@ test('marketing influenced counts a deal once, even with several engaged channel
   assert.equal(d.options.wonOpen.influenced, 1050);
   assert.equal(d.kpis.influenced, 1000);
   assert.equal(d.attribution.find(r => r.channel === 'Email').influenced, 1000); // per channel, never added together
+});
+
+test('Overview follows the header date range: chart slots add up to the period figures', () => {
+  const lost = o => row(Object.assign({ Stage: 'Closed Lost', Closing_Date: day(-3) }, o));
+  const rows = [
+    won({ Amount: 100, Closing_Date: day(0) }), won({ Amount: 200, Closing_Date: day(-6) }), won({ Amount: 400, Closing_Date: day(-20) }),
+    won({ Amount: 800, Closing_Date: day(-80) }), won({ Amount: 1600, Closing_Date: day(-300) }), won({ Amount: 3200, Closing_Date: day(-900) }),
+    lost({ Closing_Date: day(-2) }), lost({ Closing_Date: day(-50) }),
+    row({ Created_Time: day(-1) + 'T10:00:00+05:30' }), row({ Created_Time: day(-40) + 'T10:00:00+05:30' })
+  ];
+  const leads = [day(-1), day(-25), day(-200)].map((d, i) => ({ id: 'L' + i, Full_Name: 'Lead ' + i, Country: 'US', Created_Time: d + 'T10:00:00+05:30' }));
+  ['7d', '30d', '90d', '12m', 'all'].forEach(range => {
+    const d = view(rows, 'ALL', range, { leads });
+    const bars = d.periodBars, total = k => bars.reduce((t, b) => t + b[k], 0);
+    assert.equal(total('revenue'), d.kpis.confirmedAmount, range + ': revenue bars = Confirmed amount');
+    assert.equal(total('won'), d.kpis.confirmedCount, range + ': won bars = confirmed deals');
+    const closed = total('won') + total('lost');
+    assert.equal(d.kpis.winRate, closed ? total('won') / closed * 100 : null, range + ': win rate from the same period');
+    assert.equal(d.leads.months.reduce((t, m) => t + m.created, 0), d.leads.created, range + ': lead bars = leads created');
+    const all = Object.assign({ deals: rows.map(T.toDeal), accounts: [], contacts: [], campaigns: [], leads, convertedKnown: true, activity: [],
+      targets: [], firstTouch: new Map(), touches: new Map(), problems: [] });
+    T.setCountries(all, rows);
+    T.tagChannels(all.deals, all.campaigns, all.touches);
+    const country = ['US', 'UK', 'AU', T.OTHER_COUNTRY].map(c => T.countryRow(T.liveRaw(c, range, all))).reduce((t, c) => t + c.won, 0);
+    assert.equal(country, total('won'), range + ': country won = won bars');
+    assert.equal(d.periodFrom ? d.periodFrom.getTime() : null, T.periodStart(range) ? T.periodStart(range).getTime() : null);
+  });
+  // Slot sizes: 7 × 1 day, 6 × 5 days, 6 × 15 days; All time starts in the year of the first record
+  assert.equal(T.periodSlots('7d').length, 7);
+  assert.equal(T.periodSlots('30d').length, 6);
+  assert.equal(T.periodSlots('90d').length, 6);
+  assert.equal(T.periodSlots('all', new Date(now.getFullYear() - 2, 5, 1)).length, 3);
+  const all = view(rows, 'ALL', 'all', { leads });
+  assert.equal(all.periodBars[0].label, String(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 900).getFullYear()));
+});
+
+test('custom date range: every figure uses exactly the chosen days, both included', () => {
+  const custom = { range: 'custom', from: day(-10), to: day(5) };
+  const p = T.periodOf(custom);
+  assert.equal(p.days, 16);
+  const rows = [
+    won({ Amount: 100, Closing_Date: day(-10) }), won({ Amount: 200, Closing_Date: day(-1) }),   // inside (first day, yesterday)
+    won({ Amount: 400, Closing_Date: day(-11) }), won({ Amount: 800, Closing_Date: day(-40) }),  // before the range
+    row({ Stage: 'Proposal/Price Quote', Amount: 1000, Closing_Date: day(5) }),                   // open, last day: in the forecast
+    row({ Stage: 'Needs Analysis', Amount: 2000, Closing_Date: day(6) })                         // open, after the range: not
+  ];
+  const leads = [day(-10), day(0), day(-11), day(6)].map((d, i) => ({ id: 'C' + i, Full_Name: 'Lead ' + i, Country: 'US', Created_Time: d + 'T10:00:00+05:30' }));
+  const d = view(rows, 'ALL', custom, { leads });
+  assert.equal(d.kpis.confirmedAmount, 300);
+  assert.equal(d.kpis.confirmedCount, 2);
+  assert.equal(d.periodBars.reduce((t, b) => t + b.revenue, 0), 300, 'bars add up to the range');
+  assert.equal(d.leads.created, 2);
+  assert.equal(d.leads.months.reduce((t, m) => t + m.created, 0), 2);
+  assert.equal(d.periodTo.getTime(), p.to.getTime());
+  // Forecast: open deals closing inside the range from today on, at stage %
+  const f = d.revenueForecast;
+  assert.equal(f.custom, true);
+  assert.equal(f.past[5].amount, 300);
+  assert.equal(f.next.count, 1);
+  assert.equal(f.next.weighted, 750);
+  // A range that is over has no forecast
+  const past = view(rows, 'ALL', { range: 'custom', from: day(-40), to: day(-2) }, { leads });
+  assert.equal(past.revenueForecast.over, true);
+  assert.equal(past.revenueForecast.next.count, 0);
+  assert.equal(past.kpis.confirmedAmount, 1300);
+});
+
+test('revenue forecast: open deals past their Closing Date still count, and the open pipeline covers every open deal', () => {
+  const rows = [
+    row({ Stage: 'Proposal/Price Quote', Amount: 1000, Closing_Date: day(-20) }),  // overdue, 75%
+    row({ Stage: 'Qualification', Amount: 2000, Closing_Date: day(-1) }),          // overdue, 10%
+    row({ Stage: 'Negotiation/Review', Amount: 4000, Closing_Date: day(120) }),    // after the window, 90%
+    row({ Stage: 'Needs Analysis', Amount: 500, Closing_Date: day(0) })            // closing today, 20%
+  ];
+  const f = view(rows, 'ALL', '30d').revenueForecast;
+  assert.equal(f.next.count, 3, 'today + the 2 overdue deals');
+  assert.equal(f.next.weighted, 750 + 200 + 100);
+  assert.equal(f.next.best, 3500);
+  assert.equal(f.overdue.count, 2);
+  assert.equal(f.overdue.counted, true);
+  assert.equal(f.pipeline.count, 4);
+  assert.equal(f.pipeline.weighted, 750 + 200 + 3600 + 100);
+  // A custom range that includes today (yesterday and today): the deal closing yesterday is counted
+  const c = view(rows, 'ALL', { range: 'custom', from: day(-1), to: day(0) }).revenueForecast;
+  assert.equal(c.over, false);
+  assert.equal(c.next.count, 3);
+  assert.equal(c.next.weighted, 1050);
+  // A range that starts later does not take the overdue deals
+  const later = view(rows, 'ALL', { range: 'custom', from: day(100), to: day(130) }).revenueForecast;
+  assert.equal(later.next.count, 1);
+  assert.equal(later.overdue.counted, false);
 });

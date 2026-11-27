@@ -104,7 +104,7 @@
       if (spec.key === "country" || spec.key === "service" || spec.key === "channel" || spec.key === "attribution") row.style.setProperty("--row", colourOf(name));
       if (spec.key === "stage") {
         // Deeper to lighter as the stage moves on
-        row.style.setProperty("--row", ["#3730A3", "#4338CA", "#4F46E5", "#6366F1", "#7C83EE"][i] || "#8D9FC9");
+        row.style.setProperty("--row", ["#3730A3", "#4338CA", "#4F46E5", "#6366F1", "#7C83EE", "#969CF2"][i] || "#8D9FC9");
         // The stage % as a badge (same text, wrapped)
         const first = label && label.firstChild;
         if (first && first.nodeType === 3 && /^\s*\d+%/.test(first.nodeValue)) {
@@ -121,7 +121,7 @@
         if (parts.length === 2) {
           value.textContent = parts[0] + " · ";
           const chip = document.createElement("span");
-          chip.className = "pz-chip";
+          chip.className = "pz-chip" + (/^0\D/.test(parts[1]) ? " is-zero" : ""); // 0 to deals: grey chip
           chip.textContent = parts[1];
           value.appendChild(chip);
         }

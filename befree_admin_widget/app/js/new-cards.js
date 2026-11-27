@@ -104,7 +104,7 @@ window.Cards = (function () {
     return b;
   }
 
-  function fileName(name, state) { return name + "-" + state.country + "-" + state.range + ".csv"; }
+  function fileName(name, state) { return name + "-" + state.country + "-" + (state.range === "custom" ? state.from + "_" + state.to : state.range) + ".csv"; }
 
   function stack(parts, total) {
     const bar = el("div", "nc-stack");
@@ -579,10 +579,13 @@ window.Cards = (function () {
       s.body.appendChild(emptyState(state));
       return s.card;
     }
-    s.actions.append(
-      toggle([["sourced", "Sourced"], ["influenced", "Influenced"]], ui.trendKind, function (id) { ui.trendKind = id; s.card.draw(); }),
-      toggle([["stacked", "Stacked"], ["lines", "Lines"]], ui.trendStyle, function (id) { ui.trendStyle = id; s.card.draw(); })
-    );
+    // Influenced needs contact engagement or campaign members in CRM; with none recorded, only Sourced is offered
+    const hasInfluence = t.influenced.some(function (row) { return row.some(function (v) { return v > 0; }); });
+    if (!hasInfluence) ui.trendKind = "sourced";
+    if (hasInfluence) {
+      s.actions.appendChild(toggle([["sourced", "Sourced"], ["influenced", "Influenced"]], ui.trendKind, function (id) { ui.trendKind = id; s.card.draw(); }));
+    }
+    s.actions.appendChild(toggle([["stacked", "Stacked"], ["lines", "Lines"]], ui.trendStyle, function (id) { ui.trendStyle = id; s.card.draw(); }));
 
     // Latest month per channel, read by the reconciliation check.
     const latest = function () {
