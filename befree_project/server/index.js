@@ -38,7 +38,7 @@ expressApp.use('/app', express.static('app'));
 expressApp.use('/app', serveIndex('app'));
 
 
-expressApp.get('/', function (req, res) {
+expressApp.get('/', function (req, res) { 
   res.redirect('/app');
 });
 
