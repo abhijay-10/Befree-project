@@ -944,7 +944,7 @@
     risk.append(renderForecast(data, state), Cards.atRisk(data, state));
     const leads = el("div", "ov-split ov-split-wide");
     leads.append(renderLeads(data, state), renderLeadStatus(data, state));
-    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), RevenueForecastSection.render(data, state), DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
+    root.replaceChildren(renderBanner(data, state), renderKpis(data, state), DealsFunnel.render(data, state), renderCountries(data, state), leads, stages, services, risk, thirds,
       renderTable(data, state));
     services.draw();
   }
